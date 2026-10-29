@@ -85,9 +85,26 @@ class App(tk.Tk):
     def _build(self):
         top = ttk.Frame(self, padding=12)
         top.pack(fill="x")
-        ttk.Label(top, text="Rajasthan GMDC", style="Title.TLabel").pack(side="left")
+        ttk.Label(top, text="Transport", style="Title.TLabel").pack(side="left")
         ttk.Label(top, text="   PDF → DO → Builty → Bill",
                   font=("Segoe UI", 11)).pack(side="left")
+        # Always-visible workflow switch: Rajasthan opens isolated Rajasthan GMDC
+        # data; GMDC returns to the previously selected GMDC/company database.
+        mode_bar = ttk.Frame(top)
+        mode_bar.pack(side="left", padx=(12, 6))
+        self.rajasthan_mode_btn = ttk.Button(
+            mode_bar, text="Rajasthan", command=lambda: self.switch_workflow_mode("rajasthan gmdc")
+        )
+        self.rajasthan_mode_btn.pack(side="left", padx=2)
+        self.gmdc_mode_btn = ttk.Button(
+            mode_bar, text="GMDC", command=lambda: self.switch_workflow_mode("gmdc")
+        )
+        self.gmdc_mode_btn.pack(side="left", padx=2)
+        active_mode = get_active_company().casefold()
+        if active_mode == "rajasthan gmdc":
+            self.rajasthan_mode_btn.configure(state="disabled")
+        else:
+            self.gmdc_mode_btn.configure(state="disabled")
         ttk.Label(top, text="Company:", font=("Segoe UI", 9, "bold")).pack(side="left", padx=(8, 4))
         self.company_var = tk.StringVar(value=get_active_company())
         self.company_combo = ttk.Combobox(top, textvariable=self.company_var, values=list_companies(), width=22, state="readonly")
