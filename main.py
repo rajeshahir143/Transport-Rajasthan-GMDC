@@ -1718,9 +1718,10 @@ class App(tk.Tk):
         self.bill_vars["sgst_pct"].set("0")
         self.bill_vars["igst_pct"].set("5")
 
+        is_rajasthan = get_active_company().casefold() == "rajasthan gmdc"
         header_fields = [
             ("Party Name", "party_name", 28), ("Item Name", "item_name", 18),
-            ("Mines Name", "mines_name", 18), ("DO No.", "do_no", 14),
+            ("Mines Name", "mines_name", 18), ("PO No." if is_rajasthan else "DO No.", "do_no", 14),
             ("D/Note No.", "dnote_no", 12), ("Bill No.", "bill_no", 12),
             ("Date", "bill_date", 12), ("Due Date", "due_date", 12),
             ("Period From", "period_from", 12), ("Period To", "period_to", 12),
@@ -1735,7 +1736,7 @@ class App(tk.Tk):
         listing = ttk.LabelFrame(f, text="Pending Builty — select multiple of same party", padding=4)
         listing.pack(fill="both", expand=True)
         cols = ("id", "do", "builty", "date", "vehicle", "mines", "desp", "rcpt", "rate", "amount")
-        heads = ("ID", "DO No.", "Builty No.", "Date", "Vehicle No.", "Mines", "Desp. Weight", "Rcpt. Weight", "Rate Rs.", "Amount Rs.")
+        heads = ("ID", "PO No." if is_rajasthan else "DO No.", "Builty No.", "Date", "Vehicle No.", "Mines", "Desp. Weight", "Rcpt. Weight", "Rate Rs.", "Amount Rs.")
         widths = (42, 90, 90, 85, 120, 85, 100, 100, 95, 110)
         self.pb = ttk.Treeview(listing, columns=cols, show="headings", selectmode="extended", height=10)
         for col, title, width in zip(cols, heads, widths):
