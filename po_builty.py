@@ -3,7 +3,7 @@ import json, re, tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-from db import db
+from db import db, get_active_company
 
 FIELDS = [
 ("po_no","PO No."),("po_date","PO Date"),("po_buyer","Buyer / Customer"),("po_vendor","Vendor / Supplier"),
@@ -96,17 +96,20 @@ class POBuiltyTab:
             if not row:return 0.0
             total=float(row["qty"] or 0)
             standard=con.execute("SELECT COALESCE(SUM(qty),0) FROM builtys WHERE do_id=?",(do_id,)).fetchone()[0]
+            # Older B167 records may predate standard Builty integration. Count
+            # only those legacy rows that do not yet point to a standard builty.
             po_rows=con.execute("SELECT id,data_json FROM po_builtys").fetchall()
-            po_total=0.0
+            legacy_total=0.0
             for item in po_rows:
                 if exclude_id is not None and int(item["id"])==int(exclude_id):continue
                 try:
                     payload=json.loads(item["data_json"] or "{}")
-                    if str(payload.get("linked_do_id",""))==str(do_id):
-                        po_total+=max(0.0,float(payload.get("builty_qty") or 0))
+                    if (str(payload.get("linked_do_id",""))==str(do_id)
+                            and not payload.get("standard_builty_id")):
+                        legacy_total+=max(0.0,float(payload.get("builty_qty") or 0))
                 except (TypeError,ValueError):
                     continue
-            return max(0.0,total-float(standard or 0)-po_total)
+            return max(0.0,total-float(standard or 0)-legacy_total)
 
     def update_pending_label(self):
         do=self._selected_do()
@@ -223,60 +226,97 @@ class POBuiltyTab:
         with db() as con:
             standard=con.execute("SELECT COALESCE(SUM(qty),0) FROM builtys WHERE do_id=?",(do_id,)).fetchone()[0]
             rows=con.execute("SELECT data_json FROM po_builtys").fetchall()
-            po_total=0.0
+            legacy_total=0.0
             for item in rows:
                 try:
                     payload=json.loads(item["data_json"] or "{}")
-                    if str(payload.get("linked_do_id",""))==str(do_id):
-                        po_total+=max(0.0,float(payload.get("builty_qty") or 0))
+                    if str(payload.get("linked_do_id",""))==str(do_id) and not payload.get("standard_builty_id"):
+                        legacy_total+=max(0.0,float(payload.get("builty_qty") or 0))
                 except (TypeError,ValueError):
                     pass
-            con.execute("UPDATE dos SET remaining_qty=MAX(0,COALESCE(qty,0)-?-?) WHERE id=?",(float(standard or 0),po_total,do_id))
+            con.execute("UPDATE dos SET remaining_qty=MAX(0,COALESCE(qty,0)-?-?) WHERE id=?",(float(standard or 0),legacy_total,do_id))
 
     def save(self):
         d={k:v.get().strip() for k,v in self.vars.items()}
         if not d["lr_no"]:
-            messagebox.showwarning("Save PO Builty","LR No. is required.",parent=self.frame)
+            messagebox.showwarning("Save Builty","LR No. is required.",parent=self.frame)
             return False
-        do=self._selected_do()
-        if not do:
-            messagebox.showwarning("Save PO Builty","Select the DO linked to this Builty first.",parent=self.frame)
+        po=self._selected_do()
+        if not po:
+            messagebox.showwarning("Save Builty","Select the linked PO first.",parent=self.frame)
             return False
         try:
             qty=float((d.get("builty_qty") or "").replace(",",""))
-            if qty<=0:
-                raise ValueError
+            if qty<=0: raise ValueError
         except (TypeError,ValueError):
-            messagebox.showwarning("Save PO Builty","Enter a valid Builty Qty (TON) greater than zero.",parent=self.frame)
+            messagebox.showwarning("Save Builty","Enter a valid Builty Qty greater than zero.",parent=self.frame)
             return False
-        pending=self._do_pending(int(do["id"]),self.selected_id)
-        if qty>pending+1e-6:
-            messagebox.showwarning("DO Quantity",f"Builty quantity exceeds the DO pending quantity.\nPending: {pending:.3f} TON\nEntered: {qty:.3f} TON",parent=self.frame)
-            return False
+
         old_do_id=None
+        standard_id=None
+        old_billed=False
         if self.selected_id:
             with db() as con:
                 old=con.execute("SELECT data_json FROM po_builtys WHERE id=?",(self.selected_id,)).fetchone()
-            if old:
-                try:
-                    old_do_id=int(json.loads(old["data_json"] or "{}").get("linked_do_id") or 0) or None
-                except (TypeError,ValueError):
-                    pass
-        d["linked_do_id"]=str(do["id"])
+                if old:
+                    old_data=json.loads(old["data_json"] or "{}")
+                    old_do_id=int(old_data.get("linked_do_id") or 0) or None
+                    standard_id=int(old_data.get("standard_builty_id") or 0) or None
+                    if standard_id:
+                        linked=con.execute("SELECT billed,freight_paid FROM builtys WHERE id=?",(standard_id,)).fetchone()
+                        if linked and (linked["billed"] or linked["freight_paid"]):
+                            messagebox.showwarning("Builty Locked","This Builty is already billed or freight-paid; edit it from the linked transaction first.",parent=self.frame)
+                            return False
+
+        pending=self._do_pending(int(po["id"]),self.selected_id)
+        if qty>pending+1e-6:
+            messagebox.showwarning("PO Quantity",f"Builty quantity exceeds PO pending quantity.\nPending: {pending:.3f}\nEntered: {qty:.3f}",parent=self.frame)
+            return False
+
+        d["linked_do_id"]=str(po["id"])
         try:
             with db() as con:
-                if self.selected_id:
-                    con.execute("UPDATE po_builtys SET lr_no=?,lr_date=?,data_json=?,updated_at=datetime('now','localtime') WHERE id=?",(d["lr_no"],d["lr_date"],json.dumps(d,ensure_ascii=False),self.selected_id))
+                # The normal Bill and Freight screens read the standard builtys table.
+                # Persist the B167 record there, and keep the full B167 payload for printing.
+                existing_no=con.execute("SELECT id FROM builtys WHERE builty_no=?",(d["lr_no"],)).fetchone()
+                if existing_no and (not standard_id or int(existing_no["id"])!=standard_id):
+                    raise ValueError("આ LR No. પહેલેથી Builty No. તરીકે વપરાયેલ છે.")
+                if standard_id:
+                    con.execute("""UPDATE builtys SET builty_no=?,do_id=?,truck_no=?,date=?,qty=?,
+                        from_place=?,to_place=?,consignor=?,consignee=?,driver_name=?,ewaybill=?,
+                        vehicle_no=?,despatch_weight=?,receipt_weight=?,owner_name=?,mobile_no=?,
+                        address=?,challan_no=? WHERE id=?""",
+                        (d["lr_no"],int(po["id"]),d.get("truck_no",""),d.get("lr_date",""),qty,
+                         d.get("consignor_address",""),d.get("consignee_address",""),
+                         d.get("consignor_name",""),d.get("consignee_name",""),d.get("driver_name",""),
+                         d.get("eway_bill_no",""),d.get("truck_no",""),qty,qty,d.get("truck_owner",""),
+                         d.get("mobile_no",""),d.get("driver_address",""),d.get("challan_no",""),standard_id))
                 else:
-                    cur=con.execute("INSERT INTO po_builtys(lr_no,lr_date,data_json) VALUES(?,?,?)",(d["lr_no"],d["lr_date"],json.dumps(d,ensure_ascii=False))); self.selected_id=cur.lastrowid
-            self._sync_do_balance(int(do["id"]))
-            if old_do_id and old_do_id!=int(do["id"]):
-                self._sync_do_balance(old_do_id)
-            self.refresh()
-            self.refresh_do_options()
+                    cur=con.execute("""INSERT INTO builtys
+                        (builty_no,do_id,truck_no,date,qty,from_place,to_place,consignor,consignee,
+                         driver_name,ewaybill,vehicle_no,despatch_weight,receipt_weight,owner_name,
+                         mobile_no,address,challan_no)
+                        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (d["lr_no"],int(po["id"]),d.get("truck_no",""),d.get("lr_date",""),qty,
+                         d.get("consignor_address",""),d.get("consignee_address",""),
+                         d.get("consignor_name",""),d.get("consignee_name",""),d.get("driver_name",""),
+                         d.get("eway_bill_no",""),d.get("truck_no",""),qty,qty,d.get("truck_owner",""),
+                         d.get("mobile_no",""),d.get("driver_address",""),d.get("challan_no","")))
+                    standard_id=cur.lastrowid
+                d["standard_builty_id"]=str(standard_id)
+                if self.selected_id:
+                    con.execute("UPDATE po_builtys SET lr_no=?,lr_date=?,data_json=?,updated_at=datetime('now','localtime') WHERE id=?",
+                                (d["lr_no"],d["lr_date"],json.dumps(d,ensure_ascii=False),self.selected_id))
+                else:
+                    cur=con.execute("INSERT INTO po_builtys(lr_no,lr_date,data_json) VALUES(?,?,?)",
+                                    (d["lr_no"],d["lr_date"],json.dumps(d,ensure_ascii=False)))
+                    self.selected_id=cur.lastrowid
+            self._sync_do_balance(int(po["id"]))
+            if old_do_id and old_do_id!=int(po["id"]): self._sync_do_balance(old_do_id)
+            self.refresh(); self.refresh_do_options()
             return True
         except Exception as e:
-            messagebox.showerror("Save PO Builty",str(e),parent=self.frame)
+            messagebox.showerror("Save Builty",str(e),parent=self.frame)
             return False
 
     def refresh(self):
@@ -309,11 +349,20 @@ class POBuiltyTab:
         with db() as con:
             row=con.execute("SELECT data_json FROM po_builtys WHERE id=?",(ident,)).fetchone()
             linked_id=None
+            standard_id=None
             if row:
                 try:
-                    linked_id=int(json.loads(row["data_json"] or "{}").get("linked_do_id") or 0) or None
+                    payload=json.loads(row["data_json"] or "{}")
+                    linked_id=int(payload.get("linked_do_id") or 0) or None
+                    standard_id=int(payload.get("standard_builty_id") or 0) or None
                 except (TypeError,ValueError):
                     pass
+            if standard_id:
+                linked=con.execute("SELECT billed,freight_paid FROM builtys WHERE id=?",(standard_id,)).fetchone()
+                if linked and (linked["billed"] or linked["freight_paid"]):
+                    messagebox.showwarning("Delete Builty","This Builty is already billed or freight-paid and cannot be deleted.",parent=self.frame)
+                    return
+                con.execute("DELETE FROM builtys WHERE id=?",(standard_id,))
             con.execute("DELETE FROM po_builtys WHERE id=?",(ident,))
         if linked_id:
             self._sync_do_balance(linked_id)
