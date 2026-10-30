@@ -32,11 +32,13 @@ class POBuiltyTab:
               data_json TEXT NOT NULL DEFAULT '{}',
               created_at TEXT DEFAULT (datetime('now','localtime')),
               updated_at TEXT DEFAULT (datetime('now','localtime')))""")
-        f=ttk.Frame(nb,padding=8); self.frame=f; nb.add(f,text="PO Builty")
-        ttk.Label(f,text="PO Based Builty Entry — B167 Format",font=("Segoe UI",17,"bold"),foreground="#B22222").pack(anchor="w")
-        ttk.Label(f,text="PO workflow. Link each Builty to a DO; saved Builty tonnage reduces that DO balance.",wraplength=1000).pack(anchor="w",pady=5)
+        f=ttk.Frame(nb,padding=8); self.frame=f
+        is_rajasthan = str(get_active_company()).casefold() == "rajasthan gmdc"
+        nb.add(f,text="2 · Builty Entry" if is_rajasthan else "PO Builty")
+        ttk.Label(f,text="Builty Entry — B167 Print Format",font=("Segoe UI",17,"bold"),foreground="#B22222").pack(anchor="w")
+        ttk.Label(f,text="Enter Builty details in the B167 layout. Select the linked PO; saved Builty weight reduces its pending quantity.",wraplength=1000).pack(anchor="w",pady=5)
         do_bar=ttk.Frame(f); do_bar.pack(fill="x",pady=(2,6))
-        ttk.Label(do_bar,text="Linked DO:").pack(side="left",padx=(0,5))
+        ttk.Label(do_bar,text="Linked PO:" if is_rajasthan else "Linked DO:").pack(side="left",padx=(0,5))
         self.do_var=tk.StringVar()
         self.do_combo=ttk.Combobox(do_bar,textvariable=self.do_var,state="readonly",width=55)
         self.do_combo.pack(side="left",padx=3)
@@ -47,8 +49,7 @@ class POBuiltyTab:
         left=ttk.Frame(split,padding=4); right=ttk.Frame(split,padding=4)
         split.add(left,weight=3); split.add(right,weight=2)
         bar=ttk.Frame(left); bar.pack(fill="x")
-        ttk.Button(bar,text="Import PO PDF",command=self.import_pdf).pack(side="left",padx=3)
-        ttk.Button(bar,text="Create DO from PO",command=self.create_do).pack(side="left",padx=3)
+        ttk.Button(bar,text="Import Builty PDF",command=self.import_pdf).pack(side="left",padx=3)
         ttk.Button(bar,text="New / Clear",command=self.clear).pack(side="left",padx=3)
         self.vars={k:tk.StringVar() for k,_ in FIELDS}; self.vars["lr_date"].set(datetime.now().strftime("%d/%m/%Y")); self.vars["builty_company"].set("MANSI COAL CARRIER"); self.vars["builty_address"].set("At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway")
         self.selected_id=None
@@ -58,10 +59,10 @@ class POBuiltyTab:
             ttk.Entry(grid,textvariable=self.vars[key],width=28).grid(row=r,column=c*2+1,sticky="ew",padx=3,pady=3)
         for c in range(4): grid.columnconfigure(c,weight=1)
         bar2=ttk.Frame(left); bar2.pack(fill="x",pady=6)
-        ttk.Button(bar2,text="Save PO Builty",command=self.save).pack(side="left",padx=3)
+        ttk.Button(bar2,text="Save Builty",command=self.save).pack(side="left",padx=3)
         ttk.Button(bar2,text="Print / Preview PDF",command=self.print_pdf).pack(side="left",padx=3)
         ttk.Button(bar2,text="Delete Selected",command=self.delete).pack(side="left",padx=3)
-        ttk.Label(right,text="Saved PO Builtys",font=("Segoe UI",11,"bold")).pack(anchor="w")
+        ttk.Label(right,text="Saved Builty List",font=("Segoe UI",11,"bold")).pack(anchor="w")
         self.tree=ttk.Treeview(right,columns=("id","lr","date","party","truck"),show="headings",height=20)
         for c,l,w in [("id","ID",40),("lr","LR No.",80),("date","LR Date",90),("party","Consignee",160),("truck","Truck No.",95)]:
             self.tree.heading(c,text=l); self.tree.column(c,width=w,anchor="w" if c=="party" else "center")
@@ -76,7 +77,7 @@ class POBuiltyTab:
                 self.do_rows={}
                 labels=[]
                 for r in rows:
-                    label=f"#{r['id']} | DO {r['do_no'] or r['gmdc_do_no'] or r['id']} | {r['customer_name'] or ''} | {float(r['qty'] or 0):g} {r['uom'] or 'TON'}"
+                    label=f"#{r['id']} | {'PO' if str(get_active_company()).casefold() == 'rajasthan gmdc' else 'DO'} {r['do_no'] or r['gmdc_do_no'] or r['id']} | {r['customer_name'] or ''} | {float(r['qty'] or 0):g} {r['uom'] or 'TON'}"
                     self.do_rows[label]=dict(r)
                     labels.append(label)
                 self.do_combo.configure(values=labels)
@@ -358,7 +359,7 @@ def generate_po_builty_pdf(out_path,firm,data):
     meta=[("INVOICE NO","invoice_no"),("CHALAN NO","challan_no"),("E WAY BILL NO","eway_bill_no"),("E WAY BILL GENERATE DATE","eway_generate_date"),("E WAY BILL VALID DATE","eway_valid_date"),("Packing list no","packing_list_no")]
     rightmeta=t([[p(label+" : "+data.get(key,""),left)] for label,key in meta],[83*mm])
     parties=Table([[t([[x] for x in leftparty],[83*mm]),rightmeta],[t([[x] for x in rightparty],[83*mm]),""]],colWidths=[83*mm,83*mm],rowHeights=[30*mm,28*mm])
-    parties.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.8,colors.black),("INNERGRID",(0,0),(-1,-1),0.55,colors.black),("SPAN",(1,1),(1,1)),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
+    parties.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.8,colors.black),("INNERGRID",(0,0),(-1,-1),0.55,colors.black),("SPAN",(1,0),(1,1)),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
     story.append(parties)
     weights=" / ".join(x for x in (data.get("weight_1",""),data.get("weight_2","")) if x) or ((str(data.get("builty_qty","")).strip()+" TON") if data.get("builty_qty") else "")
     story.append(t([[p("NO",bold),p("DESCRIPTION",bold),p("TOTAL BUNDLE",bold),p("TOTAL WEIGHT",bold)],[p("1",bold),p(data.get("description","")),p(data.get("total_bundle","")),p(weights)],[p("SUB TOTAL",bold),"",p(data.get("total_bundle",""),bold),p(weights,bold)]],[27*mm,76*mm,28*mm,35*mm],[11*mm,31*mm,7*mm]))
