@@ -528,18 +528,53 @@ class App(tk.Tk):
         self._do_form(data={"uom": "TON", "from_place": "BHAVNAGAR"}, manual=True)
 
     def upload_pdf(self):
-        p = filedialog.askopenfilename(filetypes=[("PDF files", "*.pdf")])
+        is_rajasthan = get_active_company().casefold() == "rajasthan gmdc"
+        entry_name = "PO" if is_rajasthan else "DO"
+        p = filedialog.askopenfilename(
+            title=f"Select {entry_name} PDF",
+            filetypes=[("PDF files", "*.pdf")]
+        )
         if not p:
             return
         try:
-            d = parse_pdf(p)
+            if is_rajasthan:
+                import re
+                from pypdf import PdfReader
+                pdf_text = "\\n".join(page.extract_text() or "" for page in PdfReader(p).pages)
+                if not pdf_text.strip():
+                    raise ValueError("PO PDFમાંથી લખાણ વાંચી શકાયું નથી. Scanned PDF હોય તો Manual PO Entry વાપરો.")
+                patterns = {
+                    "po_no": r"(?i)(?:PURCHASE\\s*ORDER\\s*(?:NO|NUMBER)|P\\.?\\s*O\\.?\\s*(?:NO|NUMBER)|PO\\s*NO)\\s*[:#-]?\\s*([A-Z0-9/-]{3,})",
+                    "po_date": r"(?i)(?:PURCHASE\\s*ORDER\\s*DATE|P\\.?\\s*O\\.?\\s*DATE|PO\\s*DATE)\\s*[:#-]?\\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{2,4})",
+                    "customer_name": r"(?i)(?:BUYER|PURCHASER|CUSTOMER)(?:\\s+NAME)?\\s*[:#-]?\\s*([^\\n]+)",
+                    "customer_no": r"(?i)(?:CUSTOMER\\s*CODE|CUSTOMER\\s*NO)\\s*[:#-]?\\s*([^\\n]+)",
+                    "customer_gstin": r"(?i)(?:GSTIN|GST\\s*NO)\\s*[:#-]?\\s*([A-Z0-9]{15})",
+                    "material": r"(?i)(?:MATERIAL|ITEM\\s*DESCRIPTION|DESCRIPTION)\\s*[:#-]?\\s*([^\\n]+)",
+                    "qty": r"(?i)(?:ORDER\\s*QUANTITY|QUANTITY|QTY)\\s*[:#-]?\\s*([0-9,]+(?:\\.[0-9]+)?)",
+                    "uom": r"(?i)(?:UOM|UNIT)\\s*[:#-]?\\s*(TON|MT|KG|MTS?)",
+                    "unit_price": r"(?i)(?:UNIT\\s*PRICE|RATE(?:\\s*/\\s*(?:KG|MT|TON))?)\\s*[:#-]?\\s*(?:INR|RS\\.?|₹)?\\s*([0-9,]+(?:\\.[0-9]+)?)",
+                    "order_total": r"(?i)(?:ORDER\\s*TOTAL|TOTAL\\s*AMOUNT|GRAND\\s*TOTAL)\\s*[:#-]?\\s*(?:INR|RS\\.?|₹)?\\s*([0-9,]+(?:\\.[0-9]+)?)",
+                    "from_place": r"(?i)(?:FROM|LOADING\\s*LOCATION)\\s*[:#-]?\\s*([^\\n]+)",
+                    "to_place": r"(?i)(?:TO|DELIVERY\\s*LOCATION)\\s*[:#-]?\\s*([^\\n]+)",
+                }
+                d = {"uom": "TON", "from_place": "BHAVANAGAR"}
+                for key, pattern in patterns.items():
+                    m = re.search(pattern, pdf_text)
+                    if m:
+                        d[key] = m.group(1).strip().replace(",", "") if key in ("qty", "unit_price", "order_total") else m.group(1).strip()
+                if not d.get("po_no"):
+                    raise ValueError("PO No PDFમાં ઓળખી શકાયો નથી. PO No સ્પષ્ટ ન હોય તો Manual PO Entry કરો.")
+                d["do_no"] = d["po_no"]
+                d["do_date"] = d.get("po_date", "")
+                d["gmdc_do_no"] = d["po_no"]
+                d["schedule_rows"] = []
+            else:
+                d = parse_pdf(p)
+                if not d.get("gmdc_do_no"):
+                    raise ValueError("GMDC DO Number could not be detected.")
         except Exception as e:
-            messagebox.showerror("PDF Import", str(e))
+            messagebox.showerror(f"{entry_name} PDF Import", str(e))
             return
-        if not d.get("gmdc_do_no"):
-            messagebox.showerror("PDF Import", "GMDC DO Number could not be detected.")
-            return
-        # Open editable form pre-filled from PDF
         self._do_form(data=d, source_pdf=p)
 
     def edit_do(self):
@@ -619,6 +654,12 @@ class App(tk.Tk):
 
         def save():
             vals = {k: vars_[k].get().strip() for k, _ in fields}
+            if is_rajasthan:
+                # Keep the existing database and Builty/Bill relationships intact:
+                # PO No is the source key stored in the legacy DO key columns.
+                vals["do_no"] = vals.get("po_no", "").strip()
+                vals["do_date"] = vals.get("po_date", "").strip()
+                vals["gmdc_do_no"] = vals.get("po_no", "").strip()
             qty = _f(vals["qty"])
             if manual:
                 if not vals["do_no"]:
