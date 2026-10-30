@@ -214,8 +214,9 @@ class App(tk.Tk):
         cards = ttk.Frame(f)
         cards.pack(fill="x", pady=10)
         self.dashboard_values = {}
+        is_rajasthan = get_active_company().casefold() == "rajasthan gmdc"
         metrics = [
-            ("do_count", "DOs in Period"), ("pending_ton", "Pending TON"),
+            ("do_count", "POs in Period" if is_rajasthan else "DOs in Period"), ("pending_ton", "Pending TON"),
             ("builty_count", "Builty in Period"), ("unbilled_count", "Unbilled Builty"),
             ("bill_count", "Bills in Period"), ("bill_total", "Bill Total (Rs.)"),
             ("commission", "Commission (Rs.)"), ("driver_payable", "Driver Payable (Rs.)"),
@@ -2091,7 +2092,8 @@ class App(tk.Tk):
     def export_tab(self, nb):
         f = ttk.Frame(nb, padding=12)
         nb.add(f, text="5 · Date-wise Export")
-        ttk.Label(f, text="Export DO, Builty and Bill records by date range",
+        is_rajasthan = get_active_company().casefold() == "rajasthan gmdc"
+        ttk.Label(f, text=("Export PO, Builty and Bill records by date range" if is_rajasthan else "Export DO, Builty and Bill records by date range"),
                   style="Title.TLabel").pack(anchor="w", pady=(0, 8))
         dates = ttk.LabelFrame(f, text="Date Range", padding=8)
         dates.pack(fill="x", pady=5)
@@ -2105,7 +2107,7 @@ class App(tk.Tk):
                   wraplength=900).pack(anchor="w", pady=8)
         buttons = ttk.Frame(f)
         buttons.pack(anchor="w", pady=5)
-        ttk.Button(buttons, text="Export DOs to CSV", command=lambda: self.export_datewise("do")).grid(row=0, column=0, padx=5, pady=5)
+        ttk.Button(buttons, text=("Export POs to CSV" if is_rajasthan else "Export DOs to CSV"), command=lambda: self.export_datewise("do")).grid(row=0, column=0, padx=5, pady=5)
         ttk.Button(buttons, text="Export Builties to CSV", command=lambda: self.export_datewise("builty")).grid(row=0, column=1, padx=5, pady=5)
         ttk.Button(buttons, text="Export Bills to CSV", command=lambda: self.export_datewise("bill")).grid(row=0, column=2, padx=5, pady=5)
         ttk.Button(buttons, text="Daily Builty Report (CSV)", command=self.export_daily_builty_report).grid(row=2, column=0, columnspan=3, padx=5, pady=8, sticky="ew")
@@ -2353,8 +2355,9 @@ class App(tk.Tk):
             f, columns=("id", "builty", "do_no", "truck", "date", "qty", "owner", "payable", "paid"),
             show="headings", height=12,
         )
+        is_rajasthan = get_active_company().casefold() == "rajasthan gmdc"
         for c, h, w in zip(("id", "builty", "do_no", "truck", "date", "qty", "owner", "payable", "paid"),
-                           ("ID", "Builty No", "DO No", "Truck", "Date", "Qty", "Owner Name", "Driver Payable (Rs.)", "Status"),
+                           ("ID", "Builty No", "PO No" if is_rajasthan else "DO No", "Truck", "Date", "Qty", "Owner Name", "Driver Payable (Rs.)", "Status"),
                            [45, 95, 90, 105, 95, 75, 150, 140, 75]):
             self.fp_tv.heading(c, text=h)
             self.fp_tv.column(c, width=w)
