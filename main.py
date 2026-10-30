@@ -86,8 +86,9 @@ class App(tk.Tk):
         top = ttk.Frame(self, padding=12)
         top.pack(fill="x")
         ttk.Label(top, text="Transport", style="Title.TLabel").pack(side="left")
-        ttk.Label(top, text="   PDF → DO → Builty → Bill",
-                  font=("Segoe UI", 11)).pack(side="left")
+        active_mode_for_header = get_active_company().casefold()
+        workflow_text = "   PO → Builty → Bill" if active_mode_for_header == "rajasthan gmdc" else "   PDF → DO → Builty → Bill"
+        ttk.Label(top, text=workflow_text, font=("Segoe UI", 11)).pack(side="left")
         # Always-visible workflow switch: Rajasthan opens isolated Rajasthan GMDC
         # data; GMDC returns to the previously selected GMDC/company database.
         mode_bar = ttk.Frame(top)
@@ -470,20 +471,22 @@ class App(tk.Tk):
     # ===================== DO TAB =====================
     def do_tab(self, nb):
         f = ttk.Frame(nb, padding=10)
-        nb.add(f, text="1 · DO Entry")
+        is_rajasthan = get_active_company().casefold() == "rajasthan gmdc"
+        entry_name = "PO" if is_rajasthan else "DO"
+        nb.add(f, text=f"1 · {entry_name} Entry")
         bar = ttk.Frame(f)
         bar.pack(fill="x")
-        ttk.Button(bar, text="Upload PDF → Create DO", command=self.upload_pdf).pack(side="left")
-        ttk.Button(bar, text="＋ Manual DO Entry", command=self.manual_do_entry).pack(side="left", padx=6)
+        ttk.Button(bar, text=f"Upload {entry_name} PDF → Create {entry_name}", command=self.upload_pdf).pack(side="left")
+        ttk.Button(bar, text=f"＋ Manual {entry_name} Entry", command=self.manual_do_entry).pack(side="left", padx=6)
         ttk.Button(bar, text="Edit / Update Selected", command=self.edit_do).pack(side="left", padx=6)
         ttk.Button(bar, text="Delete Selected", command=self.delete_do).pack(side="left")
         self.show_all_dos = False
-        ttk.Button(bar, text="Pending DO", command=self.show_pending_dos).pack(side="left", padx=(10, 3))
-        ttk.Button(bar, text="All DO", command=self.show_all_do).pack(side="left", padx=3)
+        ttk.Button(bar, text=f"Pending {entry_name}", command=self.show_pending_dos).pack(side="left", padx=(10, 3))
+        ttk.Button(bar, text=f"All {entry_name}", command=self.show_all_do).pack(side="left", padx=3)
         ttk.Button(bar, text="Refresh", command=self.refresh_do).pack(side="right")
 
         cols = ("id", "do_no", "date", "customer", "material", "qty", "remaining", "transporter", "to_place")
-        heads = ["ID", "DO No", "Date", "Customer", "Material", "DO Qty", "Remaining", "Transporter", "To"]
+        heads = ["ID", "PO No" if is_rajasthan else "DO No", "Date", "Customer", "Material", "PO Qty" if is_rajasthan else "DO Qty", "Remaining", "Transporter", "To"]
         widths = [50, 110, 90, 220, 180, 85, 95, 160, 140]
         self.dot = ttk.Treeview(f, columns=cols, show="headings", height=22)
         for c, h, w in zip(cols, heads, widths):
@@ -575,12 +578,17 @@ class App(tk.Tk):
 
     def _do_form(self, data, existing_id=None, source_pdf=None, manual=False):
         w = tk.Toplevel(self)
-        w.title("Edit DO" if existing_id else ("Manual DO Entry" if manual else "Create DO from PDF"))
+        is_rajasthan = get_active_company().casefold() == "rajasthan gmdc"
+        entry_name = "PO" if is_rajasthan else "DO"
+        w.title(f"Edit {entry_name}" if existing_id else (f"Manual {entry_name} Entry" if manual else f"Create {entry_name} from PDF"))
         w.geometry("640x620")
         w.transient(self)
-        fields = [
+        fields = ([
+            ("po_no", "PO No"), ("po_date", "PO Date"),
+        ] if is_rajasthan else [
             ("gmdc_do_no", "GMDC DO No"), ("po_no", "PO No"), ("po_date", "PO Date"),
             ("do_no", "DO No"), ("do_date", "DO Date"),
+        ]) + [
             ("customer_no", "Customer No"), ("customer_name", "Customer Name"),
             ("customer_gstin", "Customer GSTIN"), ("order_type", "Order Type"),
             ("bill_to", "Bill To"), ("ship_to", "Ship To"),
