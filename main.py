@@ -117,7 +117,9 @@ class App(tk.Tk):
                   font=("Segoe UI", 9), foreground="#666").pack(side="right")
 
         nb = ttk.Notebook(self)
+        self.main_notebook = nb
         nb.pack(fill="both", expand=True, padx=10, pady=5)
+        ttk.Button(top, text="Import", command=self.open_import_tab).pack(side="left", padx=5)
         # Keep the main workspace limited to the requested daily workflow tabs.
         is_rajasthan = get_active_company().casefold() == "rajasthan gmdc"
         self.do_tab(nb)
@@ -334,8 +336,13 @@ class App(tk.Tk):
             child.destroy()
         self._build()
 
+    def open_import_tab(self):
+        if hasattr(self, "import_ui") and self.import_ui.winfo_exists():
+            self.main_notebook.select(self.import_ui)
+
     def swastik_import_tab(self, nb):
         f = ttk.Frame(nb, padding=14)
+        self.import_ui = f
         nb.add(f, text="Import")
         ttk.Label(f, text="Import legacy company data",
                   style="Title.TLabel").pack(anchor="w", pady=(0, 8))
@@ -549,7 +556,11 @@ class App(tk.Tk):
                 # Arvind Limited Purchase Order layout, plus common PO label variants.
                 def pick(pattern, default=""):
                     match = re.search(pattern, pdf_text, re.IGNORECASE | re.MULTILINE)
-                    return re.sub(r"\s+", " ", match.group(1)).strip() if match else default
+                    if not match:
+                        return default
+                    # Some PO labels (for example "Arvind Limited") have no capture group.
+                    value = match.group(1) if match.lastindex else match.group(0)
+                    return re.sub(r"\s+", " ", value).strip()
 
                 po_no = pick(r"\bPO\s*No\s*[:\-]?\s*([A-Z0-9/-]+)")
                 po_date = pick(r"\bPO\s*Date\s*[:\-]?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4})")
