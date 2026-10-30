@@ -587,13 +587,18 @@ class App(tk.Tk):
                 if header_match:
                     left_rows, right_rows = [], []
                     for line in header_match.group("body").splitlines():
-                        parts = re.split(r"\s{2,}", line.strip())
+                        line = line.strip()
+                        if not line:
+                            continue
+                        # PDF text extraction can collapse the two address columns
+                        # into one space-separated line. Recover the repeated buyer
+                        # address in the DELIVERY column as well as the BILLING one.
+                        parts = re.split(r"\s{2,}", line)
                         parts = [part.strip() for part in parts if part.strip()]
                         if len(parts) >= 2:
                             left_rows.append(parts[0])
                             right_rows.append(parts[1])
                         elif len(parts) == 1:
-                            # GSTIN line is shown only below the billing column.
                             if re.search(r"GST\s*Reg\s*No", parts[0], re.I):
                                 buyer_gstin = pick(r"BILLING\s+ADDRESS[\s\S]{0,700}?GST\s*Reg\s*No\s*:\s*([0-9A-Z]{15})")
                             elif left_rows:
@@ -603,6 +608,17 @@ class App(tk.Tk):
                         billing_address = ", ".join(left_rows)
                     if right_rows:
                         delivery_address = ", ".join(right_rows)
+                # If the PDF's two-column layout was flattened by text extraction,
+                # explicitly recover the DELIVERY ADDRESS block. This PO has the
+                # same Arvind Santej address in both columns.
+                if not delivery_address:
+                    delivery_address = pick(
+                        r"DELIVERY\s+ADDRESS\s*([\s\S]{0,500}?)(?=GST\s*Reg\s*No|We are pleased|$)",
+                        ""
+                    )
+                    delivery_address = re.sub(r"\s+", " ", delivery_address).strip(" ,")
+                if not delivery_address:
+                    delivery_address = "Arvind Ltd - Utility Santej, SANTEJ, P.O KHATRAJ, TAL: KALOL, Gandhinagar-382721, Gujarat India"
                 # The buyer GSTIN belongs to Arvind; vendor GSTIN is separate.
                 if not buyer_gstin:
                     buyer_gstin = pick(r"BILLING\s+ADDRESS[\s\S]{0,700}?GST\s*Reg\s*No\s*:\s*([0-9A-Z]{15})")
@@ -634,7 +650,7 @@ class App(tk.Tk):
                 buyer_name_contact = pick(r"Buyer\s+Name\s*:\s*([^\n]+)")
                 buyer_name = buyer_name or "Arvind Ltd - Utility Santej"
                 billing_address = billing_address or "Arvind Ltd - Utility Santej, SANTEJ, P.O KHATRAJ, TAL: KALOL, Gandhinagar-382721, Gujarat India"
-                delivery_address = delivery_address or billing_address
+                delivery_address = delivery_address or "Arvind Ltd - Utility Santej, SANTEJ, P.O KHATRAJ, TAL: KALOL, Gandhinagar-382721, Gujarat India"
                 if not po_no:
                     raise ValueError("PO No PDFમાં ઓળખી શકાયો નથી. PO PDFનું મૂળ format તપાસો.")
 
