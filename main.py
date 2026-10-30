@@ -553,43 +553,88 @@ class App(tk.Tk):
                 if not pdf_text.strip():
                     raise ValueError("PO PDFમાંથી લખાણ વાંચી શકાયું નથી. Scanned PDF હોય તો OCR અથવા Manual PO Entry વાપરો.")
 
-                # Arvind Limited Purchase Order layout, plus common PO label variants.
+                # Parse the Arvind PO first-page header and item table.
+                # This PDF places BILLING and DELIVERY columns on the same line;
+                # splitting each row by the wide whitespace is essential.
                 def pick(pattern, default=""):
                     match = re.search(pattern, pdf_text, re.IGNORECASE | re.MULTILINE)
                     if not match:
                         return default
-                    # Some PO labels (for example "Arvind Limited") have no capture group.
                     value = match.group(1) if match.lastindex else match.group(0)
                     return re.sub(r"\s+", " ", value).strip()
 
                 po_no = pick(r"\bPO\s*No\s*[:\-]?\s*([A-Z0-9/-]+)")
                 po_date = pick(r"\bPO\s*Date\s*[:\-]?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4})")
                 vendor_no = pick(r"\bVendor\s*No\s*[:\-]?\s*([A-Z0-9/-]+)")
-                vendor_name = pick(r"\bVendor\s*No\s*[:\-]?\s*[A-Z0-9/-]+\s*\n\s*([A-Z][A-Z0-9 &.,/-]+)")
-                vendor_gstin = pick(r"\bGST\s*Reg\s*No\s*[:\-]?\s*([A-Z0-9]{15})")
-                buyer_name = pick(r"\bArvind\s+Limited")
-                buyer_name = buyer_name or "Arvind Limited"
-                billing_address = pick(r"BILLING\s+ADDRESS\s*\n(.*?)(?=\n\s*DELIVERY\s+ADDRESS)", "")
-                delivery_address = pick(r"DELIVERY\s+ADDRESS\s*\n(.*?)(?=\n\s*GST\s*Reg\s*No|\n\s*We are pleased)", "")
-                billing_address = billing_address.replace("\n", ", ").strip(" ,")
-                delivery_address = delivery_address.replace("\n", ", ").strip(" ,")
+                vendor_gstin = pick(r"\bPAN\s*No\s*:[^\n]*\n\s*GST\s*Reg\s*No\s*:\s*([0-9A-Z]{15})")
+                vendor_name = ""
+                vendor_match = re.search(
+                    r"Vendor\s*No\s*:\s*[A-Z0-9/-]+\s+PO\s*No[\s\S]{0,180}?\n\s*([A-Z][A-Z0-9 &.,/-]+)\s+PO\s*Date",
+                    pdf_text, re.IGNORECASE
+                )
+                if vendor_match:
+                    vendor_name = re.sub(r"\s+", " ", vendor_match.group(1)).strip()
+                if not vendor_name:
+                    vendor_name = pick(r"Vendor\s*No\s*:\s*[A-Z0-9/-]+\s+PO\s*No[\s\S]{0,180}?\n\s*([A-Z][A-Z0-9 &.,/-]+)")
+                buyer_name = ""
+                billing_address = ""
+                delivery_address = ""
+                buyer_gstin = ""
+                header_match = re.search(
+                    r"BILLING\s+ADDRESS\s+DELIVERY\s+ADDRESS\s*\n(?P<body>[\s\S]{0,1200}?)(?=\n\s*We are pleased)",
+                    pdf_text, re.IGNORECASE
+                )
+                if header_match:
+                    left_rows, right_rows = [], []
+                    for line in header_match.group("body").splitlines():
+                        parts = re.split(r"\s{2,}", line.strip())
+                        parts = [part.strip() for part in parts if part.strip()]
+                        if len(parts) >= 2:
+                            left_rows.append(parts[0])
+                            right_rows.append(parts[1])
+                        elif len(parts) == 1:
+                            # GSTIN line is shown only below the billing column.
+                            if re.search(r"GST\s*Reg\s*No", parts[0], re.I):
+                                buyer_gstin = pick(r"BILLING\s+ADDRESS[\s\S]{0,700}?GST\s*Reg\s*No\s*:\s*([0-9A-Z]{15})")
+                            elif left_rows:
+                                left_rows.append(parts[0])
+                    if left_rows:
+                        buyer_name = left_rows[0]
+                        billing_address = ", ".join(left_rows)
+                    if right_rows:
+                        delivery_address = ", ".join(right_rows)
+                # The buyer GSTIN belongs to Arvind; vendor GSTIN is separate.
+                if not buyer_gstin:
+                    buyer_gstin = pick(r"BILLING\s+ADDRESS[\s\S]{0,700}?GST\s*Reg\s*No\s*:\s*([0-9A-Z]{15})")
                 item_match = re.search(
-                    r"\b\d+\s+([0-9]{6,})\s+([0-9,]+(?:\.[0-9]+)?)\s+(KG|MT|TON|MTS?)\s+([0-9,.]+)\s+([0-9,.]+)\s+([0-9]{2}\.[0-9]{2}\.[0-9]{4})\s*\n\s*([^\n]+)",
+                    r"\b(\d+)\s+([0-9]{6,})\s+([0-9,]+(?:\.[0-9]+)?)\s+(KG|MT|TON|MTS?)\s+([0-9,.]+)\s+([0-9,.]+)\s+([0-9]{2}\.[0-9]{2}\.[0-9]{4})\s*\n\s*([^\n]+)",
                     pdf_text, re.IGNORECASE
                 )
                 if item_match:
-                    item_code, qty, uom, unit_price, net_amount, delivery_date, material = item_match.groups()
+                    line_no, item_code, qty, uom, unit_price, net_amount, delivery_date, material = item_match.groups()
                 else:
+                    line_no = ""
                     item_code = pick(r"\bItem\s*Code\s*[:\-]?\s*([0-9]+)")
                     qty = pick(r"\bQuantity\s*[:\-]?\s*([0-9,]+(?:\.[0-9]+)?)")
-                    uom = pick(r"\bUoM\s*[:\-]?\s*(KG|MT|TON|MTS?)", "TON")
+                    uom = pick(r"\bUoM\s*[:\-]?\s*(KG|MT|TON|MTS?)", "KG")
                     unit_price = pick(r"\bUnit\s*Price\s*[:\-]?\s*([0-9,.]+)")
                     net_amount = pick(r"\bNet\s*Amount\s*[:\-]?\s*([0-9,.]+)")
                     delivery_date = pick(r"\bDelivery\s*Date\s*[:\-]?\s*([0-9.]+)")
                     material = pick(r"\b(STEAM\s+COAL[^\n]*)")
                 hsn = pick(r"\bHSN/SAC\s*Code\s*[:\-]?\s*([0-9]+)")
-                gst_buyer = pick(r"GST\s*Reg\s*No\s*:\s*([0-9A-Z]{15})")
                 gross_value = pick(r"\bGross\s+Value\s+([0-9,.]+)")
+                net_value = pick(r"\bNet\s+Value\s+([0-9,.]+)")
+                sgst_amount = pick(r"\bSGST\s+9\.00\s*%\s+([0-9,.]+)")
+                cgst_amount = pick(r"\bCGST\s+9\.00\s*%\s+([0-9,.]+)")
+                payment_terms = pick(r"Payment\s+Terms\s*:\s*(.*?)\s+Delivery\s+Terms", "")
+                delivery_terms = pick(r"Delivery\s+Terms\s*:\s*(.*?)(?:\n|$)", "")
+                buyer_email = pick(r"Buyer\s+Email\s+Id\s*:\s*([^\s]+)")
+                buyer_phone = pick(r"Buyer\s+Contact\s+No\s*:\s*([0-9]+)")
+                quotation_no = pick(r"Quotation\s+No\s*&\s*Date\.?\s*:\s*([A-Z0-9/-]+)")
+                buyer_name_contact = pick(r"Buyer\s+Name\s*:\s*([^\n]+)")
+                buyer_name = buyer_name or "Arvind Ltd - Utility Santej"
+                billing_address = billing_address or "Arvind Ltd - Utility Santej, SANTEJ, P.O KHATRAJ, TAL: KALOL, Gandhinagar-382721, Gujarat India"
+                delivery_address = delivery_address or billing_address
                 if not po_no:
                     raise ValueError("PO No PDFમાં ઓળખી શકાયો નથી. PO PDFનું મૂળ format તપાસો.")
 
@@ -598,7 +643,7 @@ class App(tk.Tk):
                     "do_no": po_no, "do_date": po_date, "gmdc_do_no": po_no,
                     "customer_no": vendor_no,
                     "customer_name": buyer_name,
-                    "customer_gstin": gst_buyer or vendor_gstin,
+                    "customer_gstin": buyer_gstin,
                     "transporter_code": vendor_no,
                     "transporter_name": vendor_name,
                     "bill_to": billing_address,
@@ -611,8 +656,9 @@ class App(tk.Tk):
                     "unit_price": unit_price.replace(",", "") if unit_price else "",
                     "extended_price": net_amount.replace(",", "") if net_amount else "",
                     "order_total": gross_value.replace(",", "") if gross_value else (net_amount.replace(",", "") if net_amount else ""),
-                    "from_place": "NILAV MINETECH",
+                    "from_place": vendor_name,
                     "to_place": delivery_address,
+                    "order_type": f"Item {item_code} | Line {line_no} | Net {net_value or net_amount} | SGST {sgst_amount} | CGST {cgst_amount} | Payment: {payment_terms} | Delivery: {delivery_terms} | Buyer: {buyer_name_contact} | {buyer_email} | {buyer_phone} | Quotation: {quotation_no} | Vendor GSTIN: {vendor_gstin}",
                     "schedule_rows": [],
                 }
             else:
