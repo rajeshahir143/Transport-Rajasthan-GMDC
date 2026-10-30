@@ -541,34 +541,68 @@ class App(tk.Tk):
             if is_rajasthan:
                 import re
                 from pypdf import PdfReader
-                pdf_text = "\\n".join(page.extract_text() or "" for page in PdfReader(p).pages)
+                pdf_text = "\n".join(page.extract_text() or "" for page in PdfReader(p).pages)
                 if not pdf_text.strip():
-                    raise ValueError("PO PDFમાંથી લખાણ વાંચી શકાયું નથી. Scanned PDF હોય તો Manual PO Entry વાપરો.")
-                patterns = {
-                    "po_no": r"(?i)(?:PURCHASE\\s*ORDER\\s*(?:NO|NUMBER)|P\\.?\\s*O\\.?\\s*(?:NO|NUMBER)|PO\\s*NO)\\s*[:#-]?\\s*([A-Z0-9/-]{3,})",
-                    "po_date": r"(?i)(?:PURCHASE\\s*ORDER\\s*DATE|P\\.?\\s*O\\.?\\s*DATE|PO\\s*DATE)\\s*[:#-]?\\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{2,4})",
-                    "customer_name": r"(?i)(?:BUYER|PURCHASER|CUSTOMER)(?:\\s+NAME)?\\s*[:#-]?\\s*([^\\n]+)",
-                    "customer_no": r"(?i)(?:CUSTOMER\\s*CODE|CUSTOMER\\s*NO)\\s*[:#-]?\\s*([^\\n]+)",
-                    "customer_gstin": r"(?i)(?:GSTIN|GST\\s*NO)\\s*[:#-]?\\s*([A-Z0-9]{15})",
-                    "material": r"(?i)(?:MATERIAL|ITEM\\s*DESCRIPTION|DESCRIPTION)\\s*[:#-]?\\s*([^\\n]+)",
-                    "qty": r"(?i)(?:ORDER\\s*QUANTITY|QUANTITY|QTY)\\s*[:#-]?\\s*([0-9,]+(?:\\.[0-9]+)?)",
-                    "uom": r"(?i)(?:UOM|UNIT)\\s*[:#-]?\\s*(TON|MT|KG|MTS?)",
-                    "unit_price": r"(?i)(?:UNIT\\s*PRICE|RATE(?:\\s*/\\s*(?:KG|MT|TON))?)\\s*[:#-]?\\s*(?:INR|RS\\.?|₹)?\\s*([0-9,]+(?:\\.[0-9]+)?)",
-                    "order_total": r"(?i)(?:ORDER\\s*TOTAL|TOTAL\\s*AMOUNT|GRAND\\s*TOTAL)\\s*[:#-]?\\s*(?:INR|RS\\.?|₹)?\\s*([0-9,]+(?:\\.[0-9]+)?)",
-                    "from_place": r"(?i)(?:FROM|LOADING\\s*LOCATION)\\s*[:#-]?\\s*([^\\n]+)",
-                    "to_place": r"(?i)(?:TO|DELIVERY\\s*LOCATION)\\s*[:#-]?\\s*([^\\n]+)",
+                    raise ValueError("PO PDFમાંથી લખાણ વાંચી શકાયું નથી. Scanned PDF હોય તો OCR અથવા Manual PO Entry વાપરો.")
+
+                # Arvind Limited Purchase Order layout, plus common PO label variants.
+                def pick(pattern, default=""):
+                    match = re.search(pattern, pdf_text, re.IGNORECASE | re.MULTILINE)
+                    return re.sub(r"\s+", " ", match.group(1)).strip() if match else default
+
+                po_no = pick(r"\bPO\s*No\s*[:\-]?\s*([A-Z0-9/-]+)")
+                po_date = pick(r"\bPO\s*Date\s*[:\-]?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4})")
+                vendor_no = pick(r"\bVendor\s*No\s*[:\-]?\s*([A-Z0-9/-]+)")
+                vendor_name = pick(r"\bVendor\s*No\s*[:\-]?\s*[A-Z0-9/-]+\s*\n\s*([A-Z][A-Z0-9 &.,/-]+)")
+                vendor_gstin = pick(r"\bGST\s*Reg\s*No\s*[:\-]?\s*([A-Z0-9]{15})")
+                buyer_name = pick(r"\bArvind\s+Limited")
+                buyer_name = buyer_name or "Arvind Limited"
+                billing_address = pick(r"BILLING\s+ADDRESS\s*\n(.*?)(?=\n\s*DELIVERY\s+ADDRESS)", "")
+                delivery_address = pick(r"DELIVERY\s+ADDRESS\s*\n(.*?)(?=\n\s*GST\s*Reg\s*No|\n\s*We are pleased)", "")
+                billing_address = billing_address.replace("\n", ", ").strip(" ,")
+                delivery_address = delivery_address.replace("\n", ", ").strip(" ,")
+                item_match = re.search(
+                    r"\b\d+\s+([0-9]{6,})\s+([0-9,]+(?:\.[0-9]+)?)\s+(KG|MT|TON|MTS?)\s+([0-9,.]+)\s+([0-9,.]+)\s+([0-9]{2}\.[0-9]{2}\.[0-9]{4})\s*\n\s*([^\n]+)",
+                    pdf_text, re.IGNORECASE
+                )
+                if item_match:
+                    item_code, qty, uom, unit_price, net_amount, delivery_date, material = item_match.groups()
+                else:
+                    item_code = pick(r"\bItem\s*Code\s*[:\-]?\s*([0-9]+)")
+                    qty = pick(r"\bQuantity\s*[:\-]?\s*([0-9,]+(?:\.[0-9]+)?)")
+                    uom = pick(r"\bUoM\s*[:\-]?\s*(KG|MT|TON|MTS?)", "TON")
+                    unit_price = pick(r"\bUnit\s*Price\s*[:\-]?\s*([0-9,.]+)")
+                    net_amount = pick(r"\bNet\s*Amount\s*[:\-]?\s*([0-9,.]+)")
+                    delivery_date = pick(r"\bDelivery\s*Date\s*[:\-]?\s*([0-9.]+)")
+                    material = pick(r"\b(STEAM\s+COAL[^\n]*)")
+                hsn = pick(r"\bHSN/SAC\s*Code\s*[:\-]?\s*([0-9]+)")
+                gst_buyer = pick(r"GST\s*Reg\s*No\s*:\s*([0-9A-Z]{15})")
+                gross_value = pick(r"\bGross\s+Value\s+([0-9,.]+)")
+                if not po_no:
+                    raise ValueError("PO No PDFમાં ઓળખી શકાયો નથી. PO PDFનું મૂળ format તપાસો.")
+
+                d = {
+                    "po_no": po_no, "po_date": po_date,
+                    "do_no": po_no, "do_date": po_date, "gmdc_do_no": po_no,
+                    "customer_no": vendor_no,
+                    "customer_name": buyer_name,
+                    "customer_gstin": gst_buyer or vendor_gstin,
+                    "transporter_code": vendor_no,
+                    "transporter_name": vendor_name,
+                    "bill_to": billing_address,
+                    "ship_to": delivery_address,
+                    "state": "Gujarat", "hsn": hsn,
+                    "material": material,
+                    "schedule_date": delivery_date,
+                    "qty": qty.replace(",", "") if qty else "",
+                    "uom": uom or "KG",
+                    "unit_price": unit_price.replace(",", "") if unit_price else "",
+                    "extended_price": net_amount.replace(",", "") if net_amount else "",
+                    "order_total": gross_value.replace(",", "") if gross_value else (net_amount.replace(",", "") if net_amount else ""),
+                    "from_place": "NILAV MINETECH",
+                    "to_place": delivery_address,
+                    "schedule_rows": [],
                 }
-                d = {"uom": "TON", "from_place": "BHAVANAGAR"}
-                for key, pattern in patterns.items():
-                    m = re.search(pattern, pdf_text)
-                    if m:
-                        d[key] = m.group(1).strip().replace(",", "") if key in ("qty", "unit_price", "order_total") else m.group(1).strip()
-                if not d.get("po_no"):
-                    raise ValueError("PO No PDFમાં ઓળખી શકાયો નથી. PO No સ્પષ્ટ ન હોય તો Manual PO Entry કરો.")
-                d["do_no"] = d["po_no"]
-                d["do_date"] = d.get("po_date", "")
-                d["gmdc_do_no"] = d["po_no"]
-                d["schedule_rows"] = []
             else:
                 d = parse_pdf(p)
                 if not d.get("gmdc_do_no"):
