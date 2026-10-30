@@ -95,7 +95,20 @@ class POBuiltyTab:
             row=con.execute("SELECT qty FROM dos WHERE id=?",(do_id,)).fetchone()
             if not row:return 0.0
             total=float(row["qty"] or 0)
-            standard=con.execute("SELECT COALESCE(SUM(qty),0) FROM builtys WHERE do_id=?",(do_id,)).fetchone()[0]
+            # When editing an existing B167 record, exclude its linked standard
+            # Builty from the consumed total so the same quantity can be edited.
+            current_standard_id=None
+            if exclude_id is not None:
+                current=con.execute("SELECT data_json FROM po_builtys WHERE id=?",(exclude_id,)).fetchone()
+                if current:
+                    try:
+                        current_standard_id=int(json.loads(current["data_json"] or "{}").get("standard_builty_id") or 0) or None
+                    except (TypeError,ValueError):
+                        pass
+            standard=con.execute(
+                "SELECT COALESCE(SUM(qty),0) FROM builtys WHERE do_id=? AND (? IS NULL OR id<>?)",
+                (do_id,current_standard_id,current_standard_id)
+            ).fetchone()[0]
             # Older B167 records may predate standard Builty integration. Count
             # only those legacy rows that do not yet point to a standard builty.
             po_rows=con.execute("SELECT id,data_json FROM po_builtys").fetchall()
