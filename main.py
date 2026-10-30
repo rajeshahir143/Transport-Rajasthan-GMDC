@@ -119,17 +119,18 @@ class App(tk.Tk):
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, padx=10, pady=5)
         # Keep the main workspace limited to the requested daily workflow tabs.
+        is_rajasthan = get_active_company().casefold() == "rajasthan gmdc"
         self.do_tab(nb)
-        self.builty_tab(nb)
+        if is_rajasthan:
+            # Rajasthan uses the B167 PO-linked Builty screen as its main Builty Entry.
+            self.po_builty_tab(nb)
+        else:
+            self.builty_tab(nb)
         self.bill_tab(nb)
         self.freight_paid_tab(nb)
         self.export_tab(nb)
         self.dashboard_tab(nb)
         self.swastik_import_tab(nb)
-        self.po_builty_tab(nb)
-        # Rajasthan GMDC uses its own company database and opens directly at PO Entry.
-        if get_active_company().casefold() == "rajasthan gmdc":
-            nb.select(self.po_builty_ui)
 
     def switch_workflow_mode(self, mode):
         """Switch between the existing GMDC company database and isolated Rajasthan GMDC data."""
