@@ -122,16 +122,24 @@ class POBuiltyTab:
         for item in self.pending_tree.get_children():
             self.pending_tree.delete(item)
         with db() as con:
-            rows=con.execute("""SELECT d.id,d.do_no,d.gmdc_do_no,d.do_date,d.customer_name,d.material,
-                                      d.qty,d.remaining_qty,d.uom
+            rows=con.execute("""SELECT d.id,d.po_no,d.po_date,d.do_no,d.gmdc_do_no,d.do_date,
+                                      d.customer_no,d.customer_name,d.customer_gstin,d.order_type,
+                                      d.bill_to,d.ship_to,d.state,d.hsn,d.material,d.schedule_date,
+                                      d.qty,d.remaining_qty,d.uom,d.unit_price,d.extended_price,
+                                      d.transporter_code,d.transporter_name,d.order_total,
+                                      d.from_place,d.to_place
                                FROM dos d WHERE COALESCE(d.remaining_qty,0)>0.000001
                                ORDER BY d.id DESC""").fetchall()
+        self.do_rows={}
         for row in rows:
-            label=row["do_no"] or row["gmdc_do_no"] or ""
+            po_no=row["po_no"] or row["do_no"] or row["gmdc_do_no"] or ""
+            po_date=row["po_date"] or row["do_date"] or ""
+            label=f"#{row['id']} | PO {po_no} | {row['customer_name'] or ''}"
+            self.do_rows[label]=dict(row)
             self.pending_tree.insert("","end",values=(
-                row["id"],label,row["do_date"] or "",row["customer_name"] or "",
-                row["material"] or "",f"{float(row['qty'] or 0):g} {row['uom'] or 'TON'}",
-                f"{float(row['remaining_qty'] or 0):.3f} TON"))
+                row["id"],po_no,row["customer_name"] or "",
+                row["material"] or "",
+                f"{float(row['remaining_qty'] or 0):.3f} {row['uom'] or 'TON'}"))
 
     def on_pending_po_select(self,_event=None):
         selection=self.pending_tree.selection()
@@ -139,15 +147,54 @@ class POBuiltyTab:
             return
         values=self.pending_tree.item(selection[0],"values")
         ident=str(values[0])
+        selected_row=None
         for label,row in getattr(self,"do_rows",{}).items():
             if str(row["id"])==ident:
                 self.do_var.set(label)
+                selected_row=row
                 break
+        if selected_row is None:
+            self.refresh_do_options()
+            for label,row in getattr(self,"do_rows",{}).items():
+                if str(row["id"])==ident:
+                    self.do_var.set(label)
+                    selected_row=row
+                    break
         self.selected_id=None
+        if selected_row:
+            self.autofill_from_po(selected_row)
         self.update_pending_label()
         self.update_po_details()
         if getattr(self,"builty_filter","all")=="selected":
             self.refresh()
+
+    def autofill_from_po(self, po):
+        """Copy the saved PO master data into the corresponding B167 fields."""
+        mapping={
+            "po_no":"po_no",
+            "po_date":"po_date",
+            "po_buyer":"customer_name",
+            "po_vendor":"transporter_name",
+            "po_material":"material",
+            "po_qty":"qty",
+            "po_uom":"uom",
+            "po_rate":"unit_price",
+            "po_delivery_date":"schedule_date",
+            "consignee_name":"customer_name",
+            "consignee_address":"ship_to",
+            "consignee_gstin":"customer_gstin",
+            "consignor_name":"transporter_name",
+            "consignor_address":"bill_to",
+        }
+        for target,source in mapping.items():
+            if target in self.vars:
+                value=po.get(source)
+                if value is not None and str(value).strip():
+                    self.vars[target].set(str(value).strip())
+        if "builty_qty" in self.vars and not self.vars["builty_qty"].get().strip():
+            remaining=self._do_pending(int(po["id"]),self.selected_id)
+            self.vars["builty_qty"].set(f"{remaining:g}" if remaining>0 else "")
+        self.update_po_details()
 
     def update_po_details(self):
         po=self._selected_do()
@@ -185,11 +232,15 @@ class POBuiltyTab:
     def refresh_do_options(self):
         try:
             with db() as con:
-                rows=con.execute("SELECT id,do_no,gmdc_do_no,customer_name,qty,uom FROM dos ORDER BY id DESC").fetchall()
+                rows=con.execute("""SELECT id,po_no,po_date,do_no,gmdc_do_no,do_date,customer_no,
+                    customer_name,customer_gstin,order_type,bill_to,ship_to,state,hsn,material,
+                    schedule_date,qty,remaining_qty,uom,unit_price,extended_price,transporter_code,
+                    transporter_name,order_total,from_place,to_place FROM dos ORDER BY id DESC""").fetchall()
                 self.do_rows={}
                 labels=[]
                 for r in rows:
-                    label=f"#{r['id']} | {'PO' if str(get_active_company()).casefold() == 'rajasthan gmdc' else 'DO'} {r['do_no'] or r['gmdc_do_no'] or r['id']} | {r['customer_name'] or ''} | {float(r['qty'] or 0):g} {r['uom'] or 'TON'}"
+                    no=r["po_no"] or r["do_no"] or r["gmdc_do_no"] or r["id"]
+                    label=f"#{r['id']} | PO {no} | {r['customer_name'] or ''}"
                     self.do_rows[label]=dict(r)
                     labels.append(label)
                 self.do_combo.configure(values=labels)
