@@ -565,8 +565,12 @@ class App(tk.Tk):
                     value = match.group(1) if match.lastindex else match.group(0)
                     return re.sub(r"\s+", " ", value).strip()
 
-                po_no = pick(r"\bPO\s*No\s*:\s*([0-9]{6,})")
-                po_date = pick(r"\bPO\s*Date\s*:\s*([0-9]{2}\.[0-9]{2}\.[0-9]{4})")
+                # Arvind's PDF text layer may render the label as "PO No.",
+                # "PO No :" or put the number on the following line.
+                po_no = pick(r"\bPO\s*(?:NO|NUMBER)\.?\s*[:#\-]?\s*([0-9]{6,})")
+                if not po_no:
+                    po_no = pick(r"\bPO\s*(?:NO|NUMBER)\.?\s*[:#\-]?\s*\n?\s*([0-9]{6,})")
+                po_date = pick(r"\bPO\s*DATE\.?\s*[:#\-]?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4})")
                 vendor_no = pick(r"\bVendor\s*No\s*:\s*([0-9]+)")
                 vendor_name = "NILAV MINETECH" if "NILAV MINETECH" in clean.upper() else ""
                 vendor_gstin = pick(r"\bGST\s*Reg\s*No\s*:\s*([0-9A-Z]{15})", "")
