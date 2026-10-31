@@ -855,6 +855,14 @@ class App(tk.Tk):
                 con.close()
                 self.refresh_do()
                 self.refresh_builty()
+                # Refresh Rajasthan's PO-linked Builty pending list immediately
+                # after a PO is saved or edited, without requiring a tab change.
+                po_tab = getattr(self, "po_builty_ui", None)
+                if po_tab is not None:
+                    try:
+                        po_tab.refresh_all()
+                    except Exception:
+                        pass
                 w.destroy()
             except Exception as e:
                 messagebox.showerror("Save DO", str(e))
