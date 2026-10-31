@@ -36,14 +36,35 @@ class POBuiltyTab:
         is_rajasthan = str(get_active_company()).casefold() == "rajasthan gmdc"
         nb.add(f,text="2 · Builty Entry" if is_rajasthan else "PO Builty")
         ttk.Label(f,text="Builty Entry — B167 Print Format",font=("Segoe UI",17,"bold"),foreground="#B22222").pack(anchor="w")
-        ttk.Label(f,text="Enter Builty details in the B167 layout. Select the linked PO; saved Builty weight reduces its pending quantity.",wraplength=1000).pack(anchor="w",pady=5)
-        do_bar=ttk.Frame(f); do_bar.pack(fill="x",pady=(2,6))
+        ttk.Label(f,text="Select a pending PO above, enter B167 details, then Save / Print. Saved weight reduces PO pending quantity.",wraplength=1000).pack(anchor="w",pady=4)
+        # GMDC-style top action bar: controls stay visible without scrolling to the bottom.
+        actions=ttk.Frame(f); actions.pack(fill="x",pady=(2,5))
+        ttk.Button(actions,text="Save Builty",command=self.save).pack(side="left",padx=2)
+        ttk.Button(actions,text="Edit Selected",command=self.edit_selected).pack(side="left",padx=2)
+        ttk.Button(actions,text="Delete Selected",command=self.delete).pack(side="left",padx=2)
+        ttk.Button(actions,text="Previous",command=lambda:self.navigate(-1)).pack(side="left",padx=2)
+        ttk.Button(actions,text="Next",command=lambda:self.navigate(1)).pack(side="left",padx=2)
+        ttk.Button(actions,text="New / Cancel",command=self.clear).pack(side="left",padx=2)
+        ttk.Button(actions,text="Print Builty",command=self.print_pdf).pack(side="left",padx=2)
+        ttk.Button(actions,text="Refresh",command=self.refresh_all).pack(side="right",padx=2)
+
+        # Upper pending-PO list, matching the GMDC DO selector workflow.
+        pending_box=ttk.LabelFrame(f,text="Pending PO List — select a PO",padding=4)
+        pending_box.pack(fill="x",pady=(0,5))
+        pcols=("id","po","date","customer","material","qty","remaining")
+        self.pending_tree=ttk.Treeview(pending_box,columns=pcols,show="headings",height=4,selectmode="browse")
+        for key,label,width in (("id","ID",42),("po","PO No.",125),("date","PO Date",90),("customer","Customer",190),("material","Material",180),("qty","PO Qty",85),("remaining","Pending",85)):
+            self.pending_tree.heading(key,text=label); self.pending_tree.column(key,width=width,anchor="w" if key in ("customer","material") else "center")
+        self.pending_tree.pack(fill="x",expand=False)
+        self.pending_tree.bind("<<TreeviewSelect>>",self.on_pending_po_select)
+
+        do_bar=ttk.Frame(f); do_bar.pack(fill="x",pady=(0,4))
         ttk.Label(do_bar,text="Linked PO:" if is_rajasthan else "Linked DO:").pack(side="left",padx=(0,5))
         self.do_var=tk.StringVar()
         self.do_combo=ttk.Combobox(do_bar,textvariable=self.do_var,state="readonly",width=55)
         self.do_combo.pack(side="left",padx=3)
         self.do_combo.bind("<<ComboboxSelected>>",lambda _e:self.update_pending_label())
-        ttk.Button(do_bar,text="Refresh DOs",command=self.refresh_do_options).pack(side="left",padx=4)
+        ttk.Button(do_bar,text="Refresh POs" if is_rajasthan else "Refresh DOs",command=self.refresh_all).pack(side="left",padx=4)
         self.pending_label=ttk.Label(do_bar,text="Pending: — TON",font=("Segoe UI",10,"bold")); self.pending_label.pack(side="left",padx=10)
         split=ttk.Panedwindow(f,orient="horizontal"); split.pack(fill="both",expand=True)
         left=ttk.Frame(split,padding=4); right=ttk.Frame(split,padding=4)
@@ -69,6 +90,60 @@ class POBuiltyTab:
         self.tree.pack(fill="both",expand=True,pady=5); self.tree.bind("<<TreeviewSelect>>",self.load)
         self.refresh()
         self.refresh_do_options()
+        self.refresh_pending_po_list()
+
+    def refresh_all(self):
+        self.refresh_do_options()
+        self.refresh_pending_po_list()
+        self.refresh()
+
+    def refresh_pending_po_list(self):
+        if not hasattr(self,"pending_tree"):
+            return
+        for item in self.pending_tree.get_children():
+            self.pending_tree.delete(item)
+        with db() as con:
+            rows=con.execute("""SELECT d.id,d.do_no,d.gmdc_do_no,d.do_date,d.customer_name,d.material,
+                                      d.qty,d.remaining_qty,d.uom
+                               FROM dos d WHERE COALESCE(d.remaining_qty,0)>0.000001
+                               ORDER BY d.id DESC""").fetchall()
+        for row in rows:
+            label=row["do_no"] or row["gmdc_do_no"] or ""
+            self.pending_tree.insert("","end",values=(
+                row["id"],label,row["do_date"] or "",row["customer_name"] or "",
+                row["material"] or "",f"{float(row['qty'] or 0):g} {row['uom'] or 'TON'}",
+                f"{float(row['remaining_qty'] or 0):.3f} TON"))
+
+    def on_pending_po_select(self,_event=None):
+        selection=self.pending_tree.selection()
+        if not selection:
+            return
+        values=self.pending_tree.item(selection[0],"values")
+        ident=str(values[0])
+        for label,row in getattr(self,"do_rows",{}).items():
+            if str(row["id"])==ident:
+                self.do_var.set(label)
+                break
+        self.selected_id=None
+        self.update_pending_label()
+
+    def edit_selected(self):
+        if not self.tree.selection():
+            messagebox.showwarning("Edit Builty","Select a saved Builty from the right-side list.",parent=self.frame)
+            return
+        self.load()
+
+    def navigate(self,step):
+        rows=self.tree.get_children()
+        if not rows:
+            return
+        selected=self.tree.selection()
+        index=rows.index(selected[0]) if selected and selected[0] in rows else (0 if step>0 else len(rows)-1)
+        index=max(0,min(len(rows)-1,index+step))
+        self.tree.selection_set(rows[index])
+        self.tree.focus(rows[index])
+        self.tree.see(rows[index])
+        self.load()
 
     def refresh_do_options(self):
         try:
@@ -138,6 +213,9 @@ class POBuiltyTab:
         self.vars["lr_date"].set(datetime.now().strftime("%d/%m/%Y"))
         self.vars["builty_qty"].set("")
         self.do_var.set("")
+        if hasattr(self,"pending_tree"):
+            for item in self.pending_tree.selection():
+                self.pending_tree.selection_remove(item)
         self.update_pending_label()
         self.vars["builty_company"].set("MANSI COAL CARRIER")
         self.vars["builty_address"].set("At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway")
@@ -338,6 +416,7 @@ class POBuiltyTab:
         for r in rows:
             d=json.loads(r["data_json"] or "{}")
             self.tree.insert("","end",values=(r["id"],r["lr_no"],r["lr_date"],d.get("consignee_name",""),d.get("truck_no","")))
+        self.refresh_pending_po_list()
 
     def load(self,_event=None):
         s=self.tree.selection()
