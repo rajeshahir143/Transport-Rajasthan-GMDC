@@ -58,14 +58,11 @@ class POBuiltyTab:
         self.pending_tree.pack(fill="x",expand=False)
         self.pending_tree.bind("<<TreeviewSelect>>",self.on_pending_po_select)
 
-        do_bar=ttk.Frame(f); do_bar.pack(fill="x",pady=(0,4))
-        ttk.Label(do_bar,text="Linked PO:" if is_rajasthan else "Linked DO:").pack(side="left",padx=(0,5))
+        # Keep the linked-order variables internally for existing save/edit logic,
+        # but do not display the redundant Linked PO / Refresh POs / Pending TON row.
         self.do_var=tk.StringVar()
-        self.do_combo=ttk.Combobox(do_bar,textvariable=self.do_var,state="readonly",width=55)
-        self.do_combo.pack(side="left",padx=3)
-        self.do_combo.bind("<<ComboboxSelected>>",lambda _e:self.update_pending_label())
-        ttk.Button(do_bar,text="Refresh POs" if is_rajasthan else "Refresh DOs",command=self.refresh_all).pack(side="left",padx=4)
-        self.pending_label=ttk.Label(do_bar,text="Pending: — TON",font=("Segoe UI",10,"bold")); self.pending_label.pack(side="left",padx=10)
+        self.do_combo=ttk.Combobox(f,textvariable=self.do_var,state="readonly",width=1)
+        self.pending_label=ttk.Label(f,text="Pending: — TON")
         split=ttk.Panedwindow(f,orient="horizontal"); split.pack(fill="both",expand=True)
         left=ttk.Frame(split,padding=4); right=ttk.Frame(split,padding=4)
         split.add(left,weight=3); split.add(right,weight=2)
