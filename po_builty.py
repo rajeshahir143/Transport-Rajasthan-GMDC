@@ -74,8 +74,19 @@ class POBuiltyTab:
         self.pending_label=ttk.Label(f,text="Pending: — TON")
         self.vars={k:tk.StringVar() for k,_ in FIELDS}; self.vars["lr_date"].set(datetime.now().strftime("%d/%m/%Y")); self.vars["builty_company"].set("MANSI COAL CARRIER"); self.vars["builty_address"].set("At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway")
         self.selected_id=None
-        ttk.Label(left,text="Transport Details",font=("Segoe UI",10,"bold")).pack(anchor="w",pady=(2,4))
-        grid=ttk.Frame(left); grid.pack(fill="both",expand=True)
+        # Scrollable form: keep every B167 field reachable even on shorter screens.
+        form_host=ttk.Frame(left); form_host.pack(fill="both",expand=True)
+        form_canvas=tk.Canvas(form_host,highlightthickness=0,borderwidth=0)
+        form_scroll=ttk.Scrollbar(form_host,orient="vertical",command=form_canvas.yview)
+        form_canvas.configure(yscrollcommand=form_scroll.set)
+        form_scroll.pack(side="right",fill="y")
+        form_canvas.pack(side="left",fill="both",expand=True)
+        form_inner=ttk.Frame(form_canvas)
+        form_window=form_canvas.create_window((0,0),window=form_inner,anchor="nw")
+        form_inner.bind("<Configure>",lambda _e:form_canvas.configure(scrollregion=form_canvas.bbox("all")))
+        form_canvas.bind("<Configure>",lambda e:form_canvas.itemconfigure(form_window,width=e.width))
+        ttk.Label(form_inner,text="Transport Details",font=("Segoe UI",10,"bold")).pack(anchor="w",pady=(2,4))
+        grid=ttk.Frame(form_inner); grid.pack(fill="both",expand=True)
         for i,(key,label) in enumerate(FIELDS):
             rr,cc=divmod(i,2); ttk.Label(grid,text=label).grid(row=rr,column=cc*2,sticky="w",padx=3,pady=3)
             ttk.Entry(grid,textvariable=self.vars[key],width=25).grid(row=rr,column=cc*2+1,sticky="ew",padx=3,pady=3)
