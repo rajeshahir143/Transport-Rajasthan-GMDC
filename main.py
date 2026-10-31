@@ -567,10 +567,16 @@ class App(tk.Tk):
 
                 # Arvind's PDF text layer may render the label as "PO No.",
                 # "PO No :" or put the number on the following line.
-                po_no = pick(r"\bPO\s*(?:NO|NUMBER)\.?\s*[:#\-]?\s*([0-9]{6,})")
+                # Important: pypdf extracts this Arvind PO in visual reading
+                # order: PO No label, PO Date label, Revision label, then the
+                # PO number and date on following lines. Do not expect values
+                # immediately after each label.
+                po_no = pick(r"\bPO\s*(?:NO|NUMBER)\.?[\s:#\-]{0,80}[\s\S]{0,220}?\b([0-9]{10})")
                 if not po_no:
-                    po_no = pick(r"\bPO\s*(?:NO|NUMBER)\.?\s*[:#\-]?\s*\n?\s*([0-9]{6,})")
-                po_date = pick(r"\bPO\s*DATE\.?\s*[:#\-]?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{4})")
+                    po_no = pick(r"\b([0-9]{10})\b(?=[\s\S]{0,300}?PO\s*DATE)")
+                po_date = pick(r"\bPO\s*DATE\.?[\s:#\-]{0,100}[\s\S]{0,220}?\b([0-9]{2}[./-][0-9]{2}[./-][0-9]{4})")
+                if not po_date:
+                    po_date = pick(r"\b([0-9]{2}[./-][0-9]{2}[./-][0-9]{4})\b(?=[\s\S]{0,200}?Revision)")
                 vendor_no = pick(r"\bVendor\s*No\s*:\s*([0-9]+)")
                 vendor_name = "NILAV MINETECH" if "NILAV MINETECH" in clean.upper() else ""
                 vendor_gstin = pick(r"\bGST\s*Reg\s*No\s*:\s*([0-9A-Z]{15})", "")
