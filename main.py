@@ -514,7 +514,12 @@ class App(tk.Tk):
         self.refresh_do()
 
     def refresh_do(self):
-        if not hasattr(self, "dot"):
+        # Ignore callbacks from a tab whose Treeview was destroyed during
+        # company/tab reconstruction.
+        try:
+            if not hasattr(self, "dot") or not self.dot.winfo_exists():
+                return
+        except tk.TclError:
             return
         for x in self.dot.get_children():
             self.dot.delete(x)
@@ -1470,7 +1475,15 @@ class App(tk.Tk):
         self.refresh_builty()
 
     def refresh_builty(self, refresh_pending=True):
-        if not hasattr(self, "pd"):
+        # A company switch/tab rebuild can destroy Treeview widgets while
+        # leaving their Python attributes behind. Never call Tcl commands on
+        # those stale widget objects (invalid command name).
+        try:
+            if not hasattr(self, "pd") or not self.pd.winfo_exists():
+                return
+            if not hasattr(self, "bt") or not self.bt.winfo_exists():
+                return
+        except tk.TclError:
             return
         selected_do_id = getattr(self, "_selected_builty_do_id", None)
         try:
