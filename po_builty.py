@@ -66,9 +66,8 @@ class POBuiltyTab:
         split=ttk.Panedwindow(f,orient="horizontal"); split.pack(fill="both",expand=True)
         left=ttk.Frame(split,padding=4); right=ttk.Frame(split,padding=4)
         split.add(left,weight=3); split.add(right,weight=2)
-        bar=ttk.Frame(left); bar.pack(fill="x")
-        ttk.Button(bar,text="Import Builty PDF",command=self.import_pdf).pack(side="left",padx=3)
-        ttk.Button(bar,text="New / Clear",command=self.clear).pack(side="left",padx=3)
+        # Builty form uses the top GMDC-style action buttons; no duplicate
+        # Import Builty PDF or New / Clear buttons are needed here.
         self.vars={k:tk.StringVar() for k,_ in FIELDS}; self.vars["lr_date"].set(datetime.now().strftime("%d/%m/%Y")); self.vars["builty_company"].set("MANSI COAL CARRIER"); self.vars["builty_address"].set("At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway")
         self.selected_id=None
         grid=ttk.Frame(left); grid.pack(fill="both",expand=True)
