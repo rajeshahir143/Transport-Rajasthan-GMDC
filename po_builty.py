@@ -35,54 +35,64 @@ class POBuiltyTab:
         f=ttk.Frame(nb,padding=8); self.frame=f
         is_rajasthan = str(get_active_company()).casefold() == "rajasthan gmdc"
         nb.add(f,text="2 · Builty Entry" if is_rajasthan else "PO Builty")
-        ttk.Label(f,text="Builty Entry — B167 Print Format",font=("Segoe UI",17,"bold"),foreground="#B22222").pack(anchor="w")
-        ttk.Label(f,text="Select a pending PO above, enter B167 details, then Save / Print. Saved weight reduces PO pending quantity.",wraplength=1000).pack(anchor="w",pady=4)
-        # GMDC-style top action bar: controls stay visible without scrolling to the bottom.
-        actions=ttk.Frame(f); actions.pack(fill="x",pady=(2,5))
-        ttk.Button(actions,text="Save Builty",command=self.save).pack(side="left",padx=2)
-        ttk.Button(actions,text="Edit Selected",command=self.edit_selected).pack(side="left",padx=2)
-        ttk.Button(actions,text="Delete Selected",command=self.delete).pack(side="left",padx=2)
-        ttk.Button(actions,text="Previous",command=lambda:self.navigate(-1)).pack(side="left",padx=2)
-        ttk.Button(actions,text="Next",command=lambda:self.navigate(1)).pack(side="left",padx=2)
-        ttk.Button(actions,text="New / Cancel",command=self.clear).pack(side="left",padx=2)
-        ttk.Button(actions,text="Print Builty",command=self.print_pdf).pack(side="left",padx=2)
-        ttk.Button(actions,text="Refresh",command=self.refresh_all).pack(side="right",padx=2)
+        ttk.Label(f,text="Builty Entry",font=("Segoe UI",17,"bold"),foreground="#B22222").pack(anchor="w")
+        # GMDC-style two-column workspace: entry form at left, order and saved
+        # Builty navigation at right.
+        split=ttk.Panedwindow(f,orient="horizontal"); split.pack(fill="both",expand=True)
+        left=ttk.Frame(split,padding=4); right=ttk.Frame(split,padding=4)
+        split.add(left,weight=3); split.add(right,weight=3)
 
-        # Upper pending-PO list, matching the GMDC DO selector workflow.
-        pending_box=ttk.LabelFrame(f,text="Pending PO List — select a PO",padding=4)
+        pending_box=ttk.LabelFrame(right,text="Pending PO — select a PO to auto-fill details",padding=4)
         pending_box.pack(fill="x",pady=(0,5))
-        pcols=("id","po","date","customer","material","qty","remaining")
-        self.pending_tree=ttk.Treeview(pending_box,columns=pcols,show="headings",height=4,selectmode="browse")
-        for key,label,width in (("id","ID",42),("po","PO No.",125),("date","PO Date",90),("customer","Customer",190),("material","Material",180),("qty","PO Qty",85),("remaining","Pending",85)):
-            self.pending_tree.heading(key,text=label); self.pending_tree.column(key,width=width,anchor="w" if key in ("customer","material") else "center")
+        pcols=("id","po","party","material","pending")
+        self.pending_tree=ttk.Treeview(pending_box,columns=pcols,show="headings",height=5,selectmode="browse")
+        for key,label,width in (("id","ID",42),("po","PO No.",115),("party","Party Name",180),("material","Item Name",150),("pending","Pending TON",90)):
+            self.pending_tree.heading(key,text=label)
+            self.pending_tree.column(key,width=width,anchor="w" if key in ("party","material") else "center")
         self.pending_tree.pack(fill="x",expand=False)
         self.pending_tree.bind("<<TreeviewSelect>>",self.on_pending_po_select)
 
-        # Keep the linked-order variables internally for existing save/edit logic,
-        # but do not display the redundant Linked PO / Refresh POs / Pending TON row.
+        details=ttk.LabelFrame(right,text="DO Details (Auto from PO)",padding=6)
+        details.pack(fill="x",pady=(0,8))
+        self.po_details_label=ttk.Label(details,text="Select a pending PO to auto-fill party, GSTIN, material and available quantity.",wraplength=520,justify="left")
+        self.po_details_label.pack(anchor="w")
+
+        saved_head=ttk.Frame(right); saved_head.pack(fill="x",pady=(2,3))
+        ttk.Label(saved_head,text="Saved Builty List",font=("Segoe UI",11,"bold")).pack(side="left")
+        ttk.Label(saved_head,text="Search:").pack(side="left",padx=(12,3))
+        self.search_var=tk.StringVar()
+        search=ttk.Entry(saved_head,textvariable=self.search_var,width=18)
+        search.pack(side="left")
+        self.search_var.trace_add("write",lambda *_:self.refresh())
+        ttk.Button(saved_head,text="Selected PO Builty",command=self.show_selected_po_builtys).pack(side="right",padx=2)
+        ttk.Button(saved_head,text="All Builty",command=self.show_all_builtys).pack(side="right",padx=2)
+        self.builty_filter="all"
+
+        # Keep PO linkage hidden from the form; selection is made in the right list.
         self.do_var=tk.StringVar()
         self.do_combo=ttk.Combobox(f,textvariable=self.do_var,state="readonly",width=1)
         self.pending_label=ttk.Label(f,text="Pending: — TON")
-        split=ttk.Panedwindow(f,orient="horizontal"); split.pack(fill="both",expand=True)
-        left=ttk.Frame(split,padding=4); right=ttk.Frame(split,padding=4)
-        split.add(left,weight=3); split.add(right,weight=2)
-        # Builty form uses the top GMDC-style action buttons; no duplicate
-        # Import Builty PDF or New / Clear buttons are needed here.
         self.vars={k:tk.StringVar() for k,_ in FIELDS}; self.vars["lr_date"].set(datetime.now().strftime("%d/%m/%Y")); self.vars["builty_company"].set("MANSI COAL CARRIER"); self.vars["builty_address"].set("At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway")
         self.selected_id=None
+        ttk.Label(left,text="Transport Details",font=("Segoe UI",10,"bold")).pack(anchor="w",pady=(2,4))
         grid=ttk.Frame(left); grid.pack(fill="both",expand=True)
         for i,(key,label) in enumerate(FIELDS):
-            r,c=divmod(i,2); ttk.Label(grid,text=label).grid(row=r,column=c*2,sticky="w",padx=3,pady=3)
-            ttk.Entry(grid,textvariable=self.vars[key],width=28).grid(row=r,column=c*2+1,sticky="ew",padx=3,pady=3)
-        for c in range(4): grid.columnconfigure(c,weight=1)
+            rr,cc=divmod(i,2); ttk.Label(grid,text=label).grid(row=rr,column=cc*2,sticky="w",padx=3,pady=3)
+            ttk.Entry(grid,textvariable=self.vars[key],width=25).grid(row=rr,column=cc*2+1,sticky="ew",padx=3,pady=3)
+        for cc in range(4): grid.columnconfigure(cc,weight=1)
         bar2=ttk.Frame(left); bar2.pack(fill="x",pady=6)
-        ttk.Button(bar2,text="Save Builty",command=self.save).pack(side="left",padx=3)
-        ttk.Button(bar2,text="Print / Preview PDF",command=self.print_pdf).pack(side="left",padx=3)
-        ttk.Button(bar2,text="Delete Selected",command=self.delete).pack(side="left",padx=3)
-        ttk.Label(right,text="Saved Builty List",font=("Segoe UI",11,"bold")).pack(anchor="w")
-        self.tree=ttk.Treeview(right,columns=("id","lr","date","party","truck"),show="headings",height=20)
-        for c,l,w in [("id","ID",40),("lr","LR No.",80),("date","LR Date",90),("party","Consignee",160),("truck","Truck No.",95)]:
-            self.tree.heading(c,text=l); self.tree.column(c,width=w,anchor="w" if c=="party" else "center")
+        ttk.Button(bar2,text="+ Add",command=self.clear).pack(side="left",padx=2)
+        ttk.Button(bar2,text="Edit Selected",command=self.edit_selected).pack(side="left",padx=2)
+        ttk.Button(bar2,text="◀ Previous",command=lambda:self.navigate(-1)).pack(side="left",padx=2)
+        ttk.Button(bar2,text="Next ▶",command=lambda:self.navigate(1)).pack(side="left",padx=2)
+        ttk.Button(bar2,text="Save Builty",command=self.save).pack(side="left",padx=2)
+        ttk.Button(bar2,text="Print Preview",command=self.print_pdf).pack(side="left",padx=2)
+        ttk.Button(bar2,text="Chit Print",command=self.print_pdf).pack(side="left",padx=2)
+        ttk.Button(bar2,text="Clear",command=self.clear).pack(side="left",padx=2)
+
+        self.tree=ttk.Treeview(right,columns=("id","lr","date","party","truck","weight","amount"),show="headings",height=15)
+        for key,label,width in [("id","ID",35),("lr","Builty No.",85),("date","Date",78),("party","Party Name",140),("truck","Truck No.",90),("weight","Weight",75),("amount","Amount",80)]:
+            self.tree.heading(key,text=label); self.tree.column(key,width=width,anchor="w" if key=="party" else "center")
         self.tree.pack(fill="both",expand=True,pady=5); self.tree.bind("<<TreeviewSelect>>",self.load)
         self.refresh()
         self.refresh_do_options()
@@ -122,6 +132,24 @@ class POBuiltyTab:
                 break
         self.selected_id=None
         self.update_pending_label()
+        self.update_po_details()
+        if getattr(self,"builty_filter","all")=="selected":
+            self.refresh()
+
+    def update_po_details(self):
+        po=self._selected_do()
+        if not hasattr(self,"po_details_label"):
+            return
+        if not po:
+            self.po_details_label.configure(text="Select a pending PO to auto-fill party, GSTIN, material and available quantity.")
+            return
+        pending=self._do_pending(int(po["id"]),self.selected_id)
+        self.po_details_label.configure(text=(
+            f"PO No.: {po.get('do_no') or po.get('gmdc_do_no') or ''}    "
+            f"Party: {po.get('customer_name') or ''}\n"
+            f"Material: {po.get('material') or ''}    "
+            f"Available Qty: {pending:g} {po.get('uom') or 'TON'}"
+        ))
 
     def edit_selected(self):
         if not self.tree.selection():
@@ -407,12 +435,34 @@ class POBuiltyTab:
             return False
 
     def refresh(self):
+        if not self.tree.winfo_exists():
+            return
         for x in self.tree.get_children(): self.tree.delete(x)
-        with db() as con: rows=con.execute("SELECT id,lr_no,lr_date,data_json FROM po_builtys ORDER BY id DESC").fetchall()
+        with db() as con:
+            rows=con.execute("SELECT id,lr_no,lr_date,data_json FROM po_builtys ORDER BY id DESC").fetchall()
+        selected_po=self._selected_do()
+        query=self.search_var.get().strip().casefold() if hasattr(self,"search_var") else ""
         for r in rows:
             d=json.loads(r["data_json"] or "{}")
-            self.tree.insert("","end",values=(r["id"],r["lr_no"],r["lr_date"],d.get("consignee_name",""),d.get("truck_no","")))
+            linked=str(d.get("linked_do_id",""))
+            if getattr(self,"builty_filter","all")=="selected" and (not selected_po or linked!=str(selected_po["id"])):
+                continue
+            searchable=" ".join(str(v or "") for v in (r["id"],r["lr_no"],r["lr_date"],d.get("consignee_name",""),d.get("truck_no",""),d.get("linked_do_id",""))).casefold()
+            if query and query not in searchable:
+                continue
+            self.tree.insert("","end",values=(r["id"],r["lr_no"],r["lr_date"],d.get("consignee_name",""),d.get("truck_no",""),d.get("builty_qty",""),d.get("total","")))
         self.refresh_pending_po_list()
+
+    def show_selected_po_builtys(self):
+        if not self._selected_do():
+            messagebox.showinfo("Builty List","Select a pending PO first.",parent=self.frame)
+            return
+        self.builty_filter="selected"
+        self.refresh()
+
+    def show_all_builtys(self):
+        self.builty_filter="all"
+        self.refresh()
 
     def load(self,_event=None):
         s=self.tree.selection()
