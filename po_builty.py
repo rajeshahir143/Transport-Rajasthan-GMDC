@@ -44,6 +44,8 @@ class POBuiltyTab:
 
         pending_box=ttk.LabelFrame(right,text="Pending PO — select a PO to auto-fill details",padding=4)
         pending_box.pack(fill="x",pady=(0,5))
+        pending_head=ttk.Frame(pending_box); pending_head.pack(fill="x")
+        ttk.Button(pending_head,text="Refresh POs",command=self.refresh_all).pack(side="right",padx=2,pady=(0,3))
         pcols=("id","po","party","material","pending")
         self.pending_tree=ttk.Treeview(pending_box,columns=pcols,show="headings",height=5,selectmode="browse")
         for key,label,width in (("id","ID",42),("po","PO No.",115),("party","Party Name",180),("material","Item Name",150),("pending","Pending TON",90)):
