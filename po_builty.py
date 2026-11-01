@@ -5,6 +5,20 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from db import db, get_active_company
 
+# Fixed B167 consignor / consignee master details for Rajasthan Builty.
+FIXED_CONSIGNOR_NAME = "KARAMTARA ENGINEERING LTD"
+FIXED_CONSIGNOR_ADDRESS = (
+    "15 NO. 112/P18P2, 113/22, 116/2, 118, "
+    "119/2, 119/1/P18P2 & P3, 120, VILL-MEGHPAR-KUNJISAR, TAL-BHACHAU"
+)
+FIXED_CONSIGNOR_GSTIN = "24AABCK1921E125"
+FIXED_CONSIGNEE_NAME = "KARAMTARA USA INC"
+FIXED_CONSIGNEE_ADDRESS = (
+    "95 HILLSIDE PARK DR, NEW HYDE PARK, NEW YORK. "
+    "Pin Code: 11040; State Code/State: /"
+)
+FIXED_CONSIGNEE_GSTIN = "URP"
+
 FIELDS = [
 ("po_no","PO No."),("po_date","PO Date"),("po_buyer","Buyer / Customer"),("po_vendor","Vendor / Supplier"),
 ("po_material","PO Material"),("po_qty","PO Quantity"),("po_uom","PO UOM"),("po_rate","PO Rate"),("po_delivery_date","Delivery Date"),
@@ -74,7 +88,7 @@ class POBuiltyTab:
         self.do_var=tk.StringVar()
         self.do_combo=ttk.Combobox(f,textvariable=self.do_var,state="readonly",width=1)
         self.pending_label=ttk.Label(f,text="Pending: — TON")
-        self.vars={k:tk.StringVar() for k,_ in FIELDS}; self.vars["lr_date"].set(datetime.now().strftime("%d/%m/%Y")); self.vars["builty_company"].set("MANSI COAL CARRIER"); self.vars["builty_address"].set("At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway")
+        self.vars={k:tk.StringVar() for k,_ in FIELDS}; self.vars["lr_date"].set(datetime.now().strftime("%d/%m/%Y")); self.vars["builty_company"].set("MANSI COAL CARRIER"); self.vars["builty_address"].set("At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway"); self.set_fixed_parties()
         self.selected_id=None
         # Scrollable form: keep every B167 field reachable even on shorter screens.
         form_host=ttk.Frame(left); form_host.pack(fill="both",expand=True)
@@ -168,6 +182,20 @@ class POBuiltyTab:
         if getattr(self,"builty_filter","all")=="selected":
             self.refresh()
 
+    def set_fixed_parties(self):
+        """Apply the same approved consignor and consignee details on every Builty."""
+        fixed={
+            "consignor_name":FIXED_CONSIGNOR_NAME,
+            "consignor_address":FIXED_CONSIGNOR_ADDRESS,
+            "consignor_gstin":FIXED_CONSIGNOR_GSTIN,
+            "consignee_name":FIXED_CONSIGNEE_NAME,
+            "consignee_address":FIXED_CONSIGNEE_ADDRESS,
+            "consignee_gstin":FIXED_CONSIGNEE_GSTIN,
+        }
+        for key,value in fixed.items():
+            if key in self.vars:
+                self.vars[key].set(value)
+
     def autofill_from_po(self, po):
         """Copy the saved PO master data into the corresponding B167 fields."""
         mapping={
@@ -194,6 +222,9 @@ class POBuiltyTab:
         if "builty_qty" in self.vars and not self.vars["builty_qty"].get().strip():
             remaining=self._do_pending(int(po["id"]),self.selected_id)
             self.vars["builty_qty"].set(f"{remaining:g}" if remaining>0 else "")
+        # These two parties are constant for every Rajasthan B167 Builty,
+        # regardless of the selected PO's billing / shipping addresses.
+        self.set_fixed_parties()
         self.update_po_details()
 
     def update_po_details(self):
