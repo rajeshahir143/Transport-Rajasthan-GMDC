@@ -615,38 +615,166 @@ class POBuiltyTab:
 
 
 def generate_po_builty_pdf(out_path,firm,data):
+    """Create a clear, full-width B167 LR print matching the supplied reference."""
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import getSampleStyleSheet,ParagraphStyle
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate,Table,TableStyle,Paragraph,Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from xml.sax.saxutils import escape
+
     styles=getSampleStyleSheet()
-    normal=ParagraphStyle("pon",parent=styles["Normal"],fontName="Helvetica",fontSize=7.5,leading=9,alignment=1)
-    bold=ParagraphStyle("pob",parent=normal,fontName="Helvetica-Bold")
-    title=ParagraphStyle("pot",parent=bold,fontSize=17,leading=19)
-    sub=ParagraphStyle("pos",parent=bold,fontSize=10,leading=12)
-    left=ParagraphStyle("pol",parent=normal,alignment=0)
-    def p(x="",s=normal):return Paragraph(escape(str(x or "").replace("\n"," ")[:1500]),s)
-    def t(rows,widths,heights=None):
-        q=Table(rows,colWidths=widths,rowHeights=heights,hAlign="CENTER")
-        q.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.8,colors.black),("INNERGRID",(0,0),(-1,-1),0.55,colors.black),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2)]));return q
-    name=str(data.get("builty_company") or firm.get("name") or "MANSI COAL CARRIER").upper()
-    address=data.get("builty_address") or firm.get("address") or "At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway"
-    story=[t([[p("|| JAY MURLIDHAR ||")],[p(name,title)],[p("TRANSPORT CONTRACTOR & COMMISSION AGENT",sub)],[p(address,bold)]],[166*mm],[5*mm,11*mm,7*mm,7*mm]),
-      t([[p("LR NO : "+data.get("lr_no",""),bold),p("LR DATE : "+data.get("lr_date",""),bold)]],[83*mm,83*mm],[7*mm]),
-      t([[p("PO NO : "+data.get("po_no",""),bold),p("PO DATE : "+data.get("po_date",""),bold)]],[83*mm,83*mm],[7*mm])]
-    leftparty=[p(": CONSIGNOR :",bold),p(data.get("consignor_name",""),bold),p(data.get("consignor_address","")),p("GSTIN: "+data.get("consignor_gstin",""),bold)]
-    rightparty=[p(": CONSIGNEE :",bold),p(data.get("consignee_name",""),bold),p(data.get("consignee_address","")),p("GSTIN No/Unique No : "+data.get("consignee_gstin",""),bold)]
-    meta=[("INVOICE NO","invoice_no"),("CHALAN NO","challan_no"),("E WAY BILL NO","eway_bill_no"),("E WAY BILL GENERATE DATE","eway_generate_date"),("E WAY BILL VALID DATE","eway_valid_date"),("Packing list no","packing_list_no")]
-    rightmeta=t([[p(label+" : "+data.get(key,""),left)] for label,key in meta],[83*mm])
-    parties=Table([[t([[x] for x in leftparty],[83*mm]),rightmeta],[t([[x] for x in rightparty],[83*mm]),""]],colWidths=[83*mm,83*mm],rowHeights=[30*mm,28*mm])
-    parties.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.8,colors.black),("INNERGRID",(0,0),(-1,-1),0.55,colors.black),("SPAN",(1,0),(1,1)),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
+    normal=ParagraphStyle("B167Normal",parent=styles["Normal"],fontName="Helvetica",fontSize=8,leading=9.5,alignment=1,spaceAfter=0)
+    bold=ParagraphStyle("B167Bold",parent=normal,fontName="Helvetica-Bold")
+    title=ParagraphStyle("B167Title",parent=bold,fontSize=18,leading=20)
+    subtitle=ParagraphStyle("B167Subtitle",parent=bold,fontSize=10,leading=12)
+    left=ParagraphStyle("B167Left",parent=normal,alignment=0)
+    small=ParagraphStyle("B167Small",parent=normal,fontSize=7.2,leading=8.4)
+    smallbold=ParagraphStyle("B167SmallBold",parent=small,fontName="Helvetica-Bold")
+    centerbold=ParagraphStyle("B167CenterBold",parent=bold,fontSize=8.5,leading=10)
+
+    def p(value="",style=normal):
+        raw=str(value or "").replace("\\r","")
+        return Paragraph("<br/>".join(escape(line) for line in raw.split("\\n")),style)
+    def table(rows,widths,heights=None,pad=3):
+        t=Table(rows,colWidths=widths,rowHeights=heights,hAlign="CENTER")
+        t.setStyle(TableStyle([
+            ("BOX",(0,0),(-1,-1),0.9,colors.black),
+            ("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
+            ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+            ("LEFTPADDING",(0,0),(-1,-1),pad),("RIGHTPADDING",(0,0),(-1,-1),pad),
+            ("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2),
+        ]))
+        return t
+    def val(key,default=""):
+        v=data.get(key)
+        return str(v if v not in (None,"") else default)
+
+    name=val("builty_company",firm.get("name") or "MANSI COAL CARRIER").upper()
+    address=val("builty_address",firm.get("address") or "At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway")
+
+    # Fixed party details requested by the user; always print these on Rajasthan B167.
+    consignor=[
+        ": CONSIGNOR :",
+        "KARAMTARA ENGINEERING LTD",
+        "15 NO. 112/P18P2, 113/22, 116/2, 118",
+        "119/2, 119/1/P18P2 & P3, 120, VILL-MEGHPAR-KUNJISAR TAL-BHACHAU",
+        "GSTIN: 24AABCK1921E125",
+    ]
+    consignee=[
+        ": CONSIGNEE :",
+        "KARAMTARA USA INC",
+        "95 HILLSIDE PARK DR, NEW HYDE PARK",
+        "NEW YORK.",
+        "Pin Code : 11040",
+        "State Code/State : /",
+        "GSTIN No/Unique No : URP",
+    ]
+
+    doc=SimpleDocTemplate(str(out_path),pagesize=A4,leftMargin=5*mm,rightMargin=5*mm,topMargin=4*mm,bottomMargin=4*mm)
+    W=200*mm
+    story=[]
+    head=Table([
+        [p("|| JAY MURLIDHAR ||",smallbold)],
+        [p(name,title)],
+        [p("TRANSPORT CONTRACTOR & COMMISSION AGENT",subtitle)],
+        [p(address,smallbold)],
+    ],colWidths=[W],rowHeights=[5*mm,10*mm,7*mm,6*mm])
+    head.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),1.0,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
+        ("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0),
+    ]))
+    story.append(head)
+    story.append(table([[
+        p("LR NO : "+val("lr_no"),smallbold),
+        p("LR DATE : "+val("lr_date"),smallbold)
+    ]],[100*mm,100*mm],[6*mm]))
+
+    left_col=Table([
+        [[p(x,smallbold if i in (0,1) else small) for i,x in enumerate(consignor)]],
+        [[p(x,smallbold if i in (0,1) else small) for i,x in enumerate(consignee)]],
+    ],colWidths=[100*mm],rowHeights=[31*mm,35*mm])
+    left_col.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),0.9,colors.black),("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(0,0),(-1,-1),"CENTER"),
+        ("LEFTPADDING",(0,0),(-1,-1),4),("RIGHTPADDING",(0,0),(-1,-1),4),
+        ("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2),
+    ]))
+    meta=[
+        ("INVOICE NO", "invoice_no"),
+        ("CHALAN NO", "challan_no"),
+        ("E WAY BILL NO", "eway_bill_no"),
+        ("E WAY BILL GENERATE DATE", "eway_generate_date"),
+        ("E WAY BILL VALID DATE", "eway_valid_date"),
+        ("Packing list no", "packing_list_no"),
+    ]
+    right_meta=Table([[p(label+" : "+val(key),smallbold)] for label,key in meta],
+                     colWidths=[100*mm],rowHeights=[11*mm]*6)
+    right_meta.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),0.9,colors.black),("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),4),
+        ("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),2),
+        ("BOTTOMPADDING",(0,0),(-1,-1),2),
+    ]))
+    parties=Table([[left_col,right_meta]],colWidths=[100*mm,100*mm],rowHeights=[66*mm])
+    parties.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.9,colors.black),("INNERGRID",(0,0),(-1,-1),0.65,colors.black),("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0)]))
     story.append(parties)
-    weights=" / ".join(x for x in (data.get("weight_1",""),data.get("weight_2","")) if x) or ((str(data.get("builty_qty","")).strip()+" TON") if data.get("builty_qty") else "")
-    story.append(t([[p("NO",bold),p("DESCRIPTION",bold),p("TOTAL BUNDLE",bold),p("TOTAL WEIGHT",bold)],[p("1",bold),p(data.get("description","")),p(data.get("total_bundle","")),p(weights)],[p("SUB TOTAL",bold),"",p(data.get("total_bundle",""),bold),p(weights,bold)]],[27*mm,76*mm,28*mm,35*mm],[11*mm,31*mm,7*mm]))
-    truck=Table([[p("Truck No :",bold),p(data.get("truck_no",""),bold),p("CGST : "+data.get("cgst",""),bold)],[p("Drivers Name",bold),p(data.get("driver_name","")),p("SGST : "+data.get("sgst",""),bold)],[p("Address",bold),p(data.get("driver_address","")),p("IGST : "+data.get("igst",""),bold)],[p("Truck Owner Name",bold),p(data.get("truck_owner","")),p("TOTAL : "+data.get("total",""),bold)],[p("Mobile No",bold),p(data.get("mobile_no","")),p("",bold)]],colWidths=[27*mm,76*mm,63*mm],rowHeights=[7*mm]*5)
-    truck.setStyle(TableStyle([("BOX",(0,0),(-1,-1),0.8,colors.black),("INNERGRID",(0,0),(-1,-1),0.55,colors.black),("VALIGN",(0,0),(-1,-1),"MIDDLE")]))
-    story.extend([truck,Spacer(1,2*mm),t([[p(data.get("notes") or "* 1% SHORTAGE ALLOWED. WE ARE NOT RESPONSIBLE FOR QUALITY MATERIAL DIRECT LOADING FROM COMPANY",left),p("For : "+name,bold)]],[105*mm,61*mm],[15*mm])])
-    doc=SimpleDocTemplate(str(out_path),pagesize=A4,leftMargin=22*mm,rightMargin=22*mm,topMargin=18*mm,bottomMargin=18*mm)
-    doc.build(story);return str(out_path)
+
+    desc=val("description",val("po_material"))
+    weight1=val("weight_1")
+    weight2=val("weight_2")
+    try:
+        total_weight=float(weight1 or 0)+float(weight2 or 0)
+        total_weight_text=f"{total_weight:,.3f}" if (weight1 or weight2) else val("builty_qty")
+    except (TypeError,ValueError):
+        total_weight_text=" / ".join(x for x in (weight1,weight2) if x) or val("builty_qty")
+    bundle=val("total_bundle")
+    goods=table([
+        [p("NO",centerbold),p("DESCRIPTION",centerbold),p("TOTAL<br/>BUNDLE",centerbold),p("TOTAL<br/>WEIGHT",centerbold)],
+        [p("1",centerbold),p(desc,centerbold),p(bundle,normal),p(total_weight_text,normal)],
+        [p("SUB TOTAL",centerbold),"",p(bundle,bold),p(total_weight_text,bold)],
+    ],[15*mm,110*mm,25*mm,50*mm],[10*mm,32*mm,7*mm])
+    story.append(goods)
+
+    truck_text=Table([
+        [p("Truck No :",smallbold),p(val("truck_no"),smallbold)],
+        [p("Drivers Name",smallbold),p(val("driver_name"),small)],
+        [p("Address",smallbold),p(val("driver_address"),small)],
+        [p("Truck Owner Name",smallbold),p(val("truck_owner"),small)],
+        [p("Mobile No",smallbold),p(val("mobile_no"),small)],
+    ],colWidths=[35*mm,75*mm],rowHeights=[7*mm]*5)
+    truck_text.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),0.9,colors.black),("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),4),
+        ("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1),
+    ]))
+    tax=Table([
+        [p("CGST "+val("cgst","0")+"%",smallbold)],
+        [p("SGST "+val("sgst","0")+"%",smallbold)],
+        [p("IGST "+val("igst","0")+"%",smallbold)],
+        [p("TOTAL : "+val("total"),smallbold)],
+    ],colWidths=[90*mm],rowHeights=[8.75*mm]*4)
+    tax.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),0.9,colors.black),("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),4),
+    ]))
+    truck_and_tax=Table([[truck_text,tax]],colWidths=[110*mm,90*mm],rowHeights=[35*mm])
+    truck_and_tax.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),0.9,colors.black),("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"TOP"),("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),
+        ("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0),
+    ]))
+    story.append(truck_and_tax)
+
+    notes=val("notes","* 1% SHORTAGE ALLOWED. WE ARE NOT RESPONSIBLE FOR QUALITY MATERIAL DIRECT LOADING FROM COMPANY")
+    footer=Table([[p(notes,left),p("For : "+name,bold)]],colWidths=[130*mm,70*mm],rowHeights=[22*mm])
+    footer.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),0.9,colors.black),("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"BOTTOM"),("LEFTPADDING",(0,0),(-1,-1),4),
+        ("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
+    ]))
+    story.append(footer)
+    doc.build(story)
+    return str(out_path)
