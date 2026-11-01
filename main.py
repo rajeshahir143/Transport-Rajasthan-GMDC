@@ -623,9 +623,13 @@ class App(tk.Tk):
                     r"\b10\s+70015153\s+2,000,000\s+KG\s+5\.80\s+11,600,000\.00\s+31\.12\.2026",
                     clean, re.IGNORECASE
                 )
-                qty = "2000000"
-                uom = "KG"
-                unit_price = "5.80"
+                # Store all Rajasthan PO quantities in TON so PO, pending
+                # balances, Builty and Bill use one consistent unit.
+                raw_qty_kg = 2000000.0
+                qty = f"{raw_qty_kg / 1000.0:g}"
+                uom = "TON"
+                # Convert the per-KG price to per-TON to preserve the PO value.
+                unit_price = f"{5.80 * 1000.0:g}"
                 net_amount = "11600000.00"
                 delivery_date = "31.12.2026"
                 item_code = "70015153"
@@ -730,7 +734,7 @@ class App(tk.Tk):
             ("customer_gstin", "Customer GSTIN"), ("order_type", "Order Type"),
             ("bill_to", "Bill To"), ("ship_to", "Ship To"),
             ("state", "State"), ("hsn", "HSN"),
-            ("material", "Material"), ("schedule_date", "Schedule Date"),
+            ("material", "Material"), ("schedule_date", "Delivery Date" if is_rajasthan else "Schedule Date"),
             ("qty", "Qty"), ("uom", "UOM"),
             ("unit_price", "Unit Price"), ("extended_price", "Extended Price"),
             ("transporter_code", "Transporter Code"), ("transporter_name", "Transporter Name"),
