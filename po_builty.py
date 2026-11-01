@@ -622,6 +622,7 @@ def generate_po_builty_pdf(out_path,firm,data):
     from reportlab.lib.units import mm
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from xml.sax.saxutils import escape
+    from datetime import datetime
 
     styles=getSampleStyleSheet()
     normal=ParagraphStyle("B167Normal",parent=styles["Normal"],fontName="Helvetica",fontSize=8,leading=9.5,alignment=1,spaceAfter=0)
@@ -768,12 +769,41 @@ def generate_po_builty_pdf(out_path,firm,data):
     ]))
     story.append(truck_and_tax)
 
-    notes=val("notes","* 1% SHORTAGE ALLOWED. WE ARE NOT RESPONSIBLE FOR QUALITY MATERIAL DIRECT LOADING FROM COMPANY")
-    footer=Table([[p(notes,left),p("For : "+name,bold)]],colWidths=[130*mm,70*mm],rowHeights=[22*mm])
+    # B167 footer: all three statutory notes on the left and the
+    # signature/name/declaration panel on the right, as in the reference.
+    notice_style=ParagraphStyle("B167Notice",parent=left,fontName="Helvetica-Bold",fontSize=7.1,leading=8.3)
+    notices=Table([
+        [p("* 1% SHORTAGE ALLOWED. WE ARE NOT RESPONSIBLE FOR\\nQUALITY MATERIAL DIRECT LOADING FROM COMPANY",notice_style)],
+        [p("* GSTIN NO 24AHOPC9866DIZ5",notice_style)],
+        [p("* SUBJECT TO BHUJ JURISDICTION",notice_style)],
+    ],colWidths=[115*mm],rowHeights=[11*mm,7*mm,7*mm])
+    notices.setStyle(TableStyle([
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),2),
+        ("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1),
+    ]))
+    sign_date=val("lr_date",datetime.now().strftime("%d/%m/%Y"))
+    signature=Table([
+        [[p("MAVJI NARAN",centerbold),p("CHAD",centerbold)],
+         [p("Digitally signed by",small),p("MAVJI NARAN CHAD",smallbold),
+          p("Date: "+sign_date,small),p("",small)]],
+        [p("FOR : MANSI COAL CAREER",centerbold),""],
+    ],colWidths=[55*mm,60*mm],rowHeights=[18*mm,8*mm])
+    signature.setStyle(TableStyle([
+        ("SPAN",(0,1),(1,1)),
+        ("BOX",(0,0),(-1,-1),0.8,colors.black),
+        ("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ALIGN",(0,0),(-1,-1),"CENTER"),
+        ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2),
+        ("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1),
+    ]))
+    footer=Table([[notices,signature]],colWidths=[115*mm,85*mm],rowHeights=[25*mm])
     footer.setStyle(TableStyle([
         ("BOX",(0,0),(-1,-1),0.9,colors.black),("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
-        ("VALIGN",(0,0),(-1,-1),"BOTTOM"),("LEFTPADDING",(0,0),(-1,-1),4),
-        ("RIGHTPADDING",(0,0),(-1,-1),4),("TOPPADDING",(0,0),(-1,-1),3),("BOTTOMPADDING",(0,0),(-1,-1),3),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),
+        ("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0),
     ]))
     story.append(footer)
     doc.build(story)
