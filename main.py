@@ -722,7 +722,8 @@ class App(tk.Tk):
         fields = ([
             ("po_no", "PO No"), ("po_date", "PO Date"),
         ] if is_rajasthan else [
-            ("gmdc_do_no", "GMDC DO No"), ("po_no", "PO No"), ("po_date", "PO Date"),
+            # GMDC mode remains DO-based: do not show Rajasthan-only PO fields.
+            ("gmdc_do_no", "GMDC DO No"),
             ("do_no", "DO No"), ("do_date", "DO Date"),
         ]) + [
             ("customer_no", "Customer No"), ("customer_name", "Customer Name"),
