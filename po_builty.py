@@ -822,27 +822,27 @@ def generate_po_builty_pdf(out_path,firm,data):
         created_at=datetime.now()
     sign_date=created_at.strftime("%Y.%m.%d")
     sign_time=created_at.strftime("%H:%M:%S")
-    sign_name=ParagraphStyle("B167SignName",parent=centerbold,fontSize=17,leading=20)
-    sign_meta=ParagraphStyle("B167SignMeta",parent=small,fontSize=10,leading=12,alignment=0)
-    sign_for=ParagraphStyle("B167SignFor",parent=centerbold,fontSize=15,leading=18)
+    sign_name=ParagraphStyle("B167SignName",parent=centerbold,fontSize=13,leading=16)
+    sign_meta=ParagraphStyle("B167SignMeta",parent=small,fontSize=7.5,leading=9,alignment=0)
+    sign_for=ParagraphStyle("B167SignFor",parent=centerbold,fontSize=11,leading=14)
     sign_top=Table([[
         [p("MAVJI NARAN",sign_name),p("CHAD",sign_name)],
         [p("Digitally signed by",sign_meta),p("MAVJI NARAN CHAD",ParagraphStyle("B167SignBold",parent=sign_meta,fontName="Helvetica-Bold")),p("Date: "+sign_date,sign_meta),p(sign_time+" +05'30'",sign_meta)]
-    ]],colWidths=[65*mm,55*mm],rowHeights=[35*mm])
+    ]],colWidths=[39*mm,39*mm],rowHeights=[35*mm])
     sign_top.setStyle(TableStyle([
         ("BOX",(0,0),(-1,-1),1.8,colors.black),("INNERGRID",(0,0),(-1,-1),1.2,colors.black),
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(0,0),(0,0),"CENTER"),
         ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
         ("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2),
     ]))
-    sign_bottom=Table([[p("FOR : MANSI COAL CAREER",sign_for)]],colWidths=[120*mm],rowHeights=[12*mm])
+    sign_bottom=Table([[p("FOR : MANSI COAL CAREER",sign_for)]],colWidths=[78*mm],rowHeights=[12*mm])
     sign_bottom.setStyle(TableStyle([
         ("BOX",(0,0),(-1,-1),1.8,colors.black),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
         ("ALIGN",(0,0),(-1,-1),"CENTER"),("LEFTPADDING",(0,0),(-1,-1),2),
         ("RIGHTPADDING",(0,0),(-1,-1),2),("TOPPADDING",(0,0),(-1,-1),1),
         ("BOTTOMPADDING",(0,0),(-1,-1),1),
     ]))
-    right_panel=Table([[sign_top],[sign_bottom]],colWidths=[120*mm],rowHeights=[35*mm,12*mm])
+    right_panel=Table([[sign_top],[sign_bottom]],colWidths=[78*mm],rowHeights=[35*mm,12*mm])
     right_panel.setStyle(TableStyle([
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),
         ("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),
