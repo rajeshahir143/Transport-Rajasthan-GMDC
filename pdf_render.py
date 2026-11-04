@@ -338,13 +338,16 @@ def generate_bill_pdf(out_path, firm, bill, builties):
     invoice_title = ParagraphStyle("BillInvoiceTitle", parent=title, fontSize=11, leading=13, alignment=1)
     header_small = ParagraphStyle("BillHeaderSmall", parent=normal, fontName="Helvetica-Bold",
                                   fontSize=7.2, leading=8.5, alignment=1)
+    bill_header_address = str(firm.get("address") or "At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway")
+    # Rajasthan bill stationery must not show the old Bhavnagar, Gujarat location.
+    bill_header_address = re.sub(r"\\bBhavnagar\\s*,?\\s*Gujarat\\b", "", bill_header_address, flags=re.IGNORECASE).strip(" ,-/")
+    bill_header_address = (bill_header_address + "    GSTIN : " + str(firm.get("gstin") or "")).strip()
     company_head = Table([
         [para("|| JAY MURLIDHAR ||", header_small)],
         [para(firm_name, title)],
         [para("TRANSPORT CONTRACTOR & COMMISSION AGENT",
               ParagraphStyle("BillHeaderSubtitle", parent=header_small, fontSize=9, leading=11))],
-        [para(str(firm.get("address") or "At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway"),
-              header_small)],
+        [para(bill_header_address, header_small)],
     ], colWidths=[182*mm], rowHeights=[5*mm, 10*mm, 7*mm, 6*mm])
     company_head.setStyle(TableStyle([
         ("BOX",(0,0),(-1,-1),0.9,colors.black),
@@ -354,9 +357,9 @@ def generate_bill_pdf(out_path, firm, bill, builties):
         ("TOPPADDING",(0,0),(-1,-1),0), ("BOTTOMPADDING",(0,0),(-1,-1),0),
     ]))
     invoice_info = Table([[
-        para("GSTIN : " + str(firm.get("gstin") or ""), bold),
+        para("BILL NO : " + str(bill_no), bold),
         para(invoice_label, invoice_title),
-        para("No. : " + str(bill_no) + "    Date : " + display_bill_date,
+        para("DATE : " + display_bill_date,
              ParagraphStyle("BillMetaRight", parent=bold, alignment=2)),
     ]], colWidths=[61*mm, 60*mm, 61*mm], rowHeights=[8*mm])
     invoice_info.setStyle(TableStyle([
