@@ -31,7 +31,7 @@ FIELDS = [
 ("consignee_gstin","Consignee GSTIN"),("invoice_no","Invoice No."),("challan_no","Challan No."),
 ("eway_bill_no","E-Way Bill No."),("eway_generate_date","E-Way Bill Generate Date"),
 ("eway_valid_date","E-Way Bill Valid Date"),("packing_list_no","Packing List No."),
-("description","Description"),("total_bundle","Total Bundle"),("weight_1","Weight 1"),
+("description","Description"),("bundle_1","Bundle 1"),("total_bundle","Total Bundle 2"),("weight_1","Weight 1"),
 ("weight_2","Weight 2"),("truck_no","Truck No."),("driver_name","Driver Name"),
 ("driver_address","Address"),("truck_owner","Truck Owner Name"),("mobile_no","Mobile No."),
 ("cgst","CGST"),("sgst","SGST"),("igst","IGST"),("total","Total"),("notes","Notes / Terms")]
@@ -735,11 +735,24 @@ def generate_po_builty_pdf(out_path,firm,data):
         total_weight_text=f"{total_weight:,.3f}" if (weight1 or weight2) else val("builty_qty")
     except (TypeError,ValueError):
         total_weight_text=" / ".join(x for x in (weight1,weight2) if x) or val("builty_qty")
-    bundle=val("total_bundle")
+    bundle1=val("bundle_1")
+    bundle2=val("total_bundle")
+    weight1=val("weight_1")
+    weight2=val("weight_2")
+    def add_numeric(a,b):
+        try:
+            total=float((a or "0").replace(",",""))+float((b or "0").replace(",",""))
+            return f"{total:,.3f}".rstrip("0").rstrip(".")
+        except (TypeError,ValueError,AttributeError):
+            return ""
+    bundle_total=add_numeric(bundle1,bundle2)
+    weight_total=add_numeric(weight1,weight2)
+    bundle_lines="\\n".join(x for x in (bundle1,bundle2) if x)
+    weight_lines="\\n".join(x for x in (weight1,weight2) if x)
     goods=table([
         [p("NO",centerbold),p("DESCRIPTION",centerbold),p("TOTAL\\nBUNDLE",centerbold),p("TOTAL\\nWEIGHT",centerbold)],
-        [p("1",centerbold),p(desc,centerbold),p(bundle,normal),p(total_weight_text,normal)],
-        [p("SUB TOTAL",centerbold),"",p(bundle,bold),p(total_weight_text,bold)],
+        [p("1",centerbold),p(desc,centerbold),p(bundle_lines,normal),p(weight_lines,normal)],
+        [p("SUB TOTAL",centerbold),"",p(bundle_total,bold),p(weight_total,bold)],
     ],[15*mm,103*mm,32*mm,50*mm],[10*mm,32*mm,7*mm])
     story.append(goods)
 
