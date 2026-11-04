@@ -762,10 +762,13 @@ def generate_po_builty_pdf(out_path,firm,data):
     bundle_total=add_numeric(bundle1,bundle2)
     weight_total=add_numeric(weight1,weight2)
     pair_rows=[]
-    for b,w in ((bundle1,weight1),(bundle2,weight2)):
-        if b or w:
-            pair_rows.append([p(b,normal),p(w,normal)])
-    pair_table=Table(pair_rows or [["",""]],colWidths=[32*mm,50*mm],rowHeights=[16*mm]*max(1,len(pair_rows)))
+    if bundle1 or weight1:
+        pair_rows.append([p(bundle1,normal),p(weight1,normal)])
+    # Intentional blank spacer row keeps the two entries visibly separated.
+    pair_rows.append(["",""])
+    if bundle2 or weight2:
+        pair_rows.append([p(bundle2,normal),p(weight2,normal)])
+    pair_table=Table(pair_rows or [["",""]],colWidths=[32*mm,50*mm],rowHeights=[12*mm,8*mm,12*mm] if len(pair_rows)==3 else None)
     pair_table.setStyle(TableStyle([
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(0,0),(-1,-1),"CENTER"),
         ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2),
