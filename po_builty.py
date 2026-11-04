@@ -608,6 +608,10 @@ class POBuiltyTab:
         if not d["lr_no"]:messagebox.showwarning("Print PDF","Enter/import LR No. first.");return
         if not self.save():return
         from po_builty import generate_po_builty_pdf
+        # Keep the original saved timestamp; previewing/printing later must not change it.
+        with db() as con:
+            saved=con.execute("SELECT created_at FROM po_builtys WHERE id=?",(self.selected_id,)).fetchone()
+        d["created_at"] = saved["created_at"] if saved else ""
         out=self.export_dir/("PO_Builty_"+re.sub(r"[^A-Za-z0-9_-]","_",d["lr_no"])+".pdf")
         try:generate_po_builty_pdf(out,self.firm_getter(),d)
         except Exception as e:messagebox.showerror("PO Builty PDF",str(e));return
@@ -769,38 +773,59 @@ def generate_po_builty_pdf(out_path,firm,data):
     ]))
     story.append(truck_and_tax)
 
-    # B167 footer: all three statutory notes on the left and the
-    # signature/name/declaration panel on the right, as in the reference.
-    notice_style=ParagraphStyle("B167Notice",parent=left,fontName="Helvetica-Bold",fontSize=7.1,leading=8.3)
+    # Footer sized and divided like the user's two reference images.
+    notice_style=ParagraphStyle("B167Notice",parent=left,fontName="Helvetica-Bold",fontSize=11.5,leading=15)
     notices=Table([
         [p("* 1% SHORTAGE ALLOWED. WE ARE NOT RESPONSIBLE FOR\\nQUALITY MATERIAL DIRECT LOADING FROM COMPANY",notice_style)],
         [p("* GSTIN NO 24AHOPC9866DIZ5",notice_style)],
         [p("* SUBJECT TO BHUJ JURISDICTION",notice_style)],
-    ],colWidths=[115*mm],rowHeights=[11*mm,7*mm,7*mm])
+    ],colWidths=[122*mm],rowHeights=[23*mm,12*mm,12*mm])
     notices.setStyle(TableStyle([
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),2),
-        ("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1),
+        ("LEFTPADDING",(0,0),(-1,-1),3*mm),("RIGHTPADDING",(0,0),(-1,-1),2*mm),
+        ("TOPPADDING",(0,0),(-1,-1),1*mm),("BOTTOMPADDING",(0,0),(-1,-1),1*mm),
     ]))
-    sign_date=val("lr_date",datetime.now().strftime("%d/%m/%Y"))
-    signature=Table([
-        [[p("MAVJI NARAN",centerbold),p("CHAD",centerbold)],
-         [p("Digitally signed by",small),p("MAVJI NARAN CHAD",smallbold),
-          p("Date: "+sign_date,small),p("",small)]],
-        [p("FOR : MANSI COAL CAREER",centerbold),""],
-    ],colWidths=[55*mm,60*mm],rowHeights=[18*mm,8*mm])
-    signature.setStyle(TableStyle([
-        ("SPAN",(0,1),(1,1)),
-        ("BOX",(0,0),(-1,-1),0.8,colors.black),
-        ("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
-        ("ALIGN",(0,0),(-1,-1),"CENTER"),
-        ("LEFTPADDING",(0,0),(-1,-1),2),("RIGHTPADDING",(0,0),(-1,-1),2),
-        ("TOPPADDING",(0,0),(-1,-1),1),("BOTTOMPADDING",(0,0),(-1,-1),1),
+    created_raw=str(data.get("created_at") or "").strip()
+    created_at=None
+    for fmt in ("%Y-%m-%d %H:%M:%S","%Y-%m-%dT%H:%M:%S"):
+        try:
+            created_at=datetime.strptime(created_raw[:19],fmt)
+            break
+        except ValueError:
+            pass
+    if created_at is None:
+        created_at=datetime.now()
+    sign_date=created_at.strftime("%Y.%m.%d")
+    sign_time=created_at.strftime("%H:%M:%S")
+    sign_name=ParagraphStyle("B167SignName",parent=centerbold,fontSize=17,leading=20)
+    sign_meta=ParagraphStyle("B167SignMeta",parent=small,fontSize=10,leading=12,alignment=0)
+    sign_for=ParagraphStyle("B167SignFor",parent=centerbold,fontSize=15,leading=18)
+    sign_top=Table([[
+        [p("MAVJI NARAN",sign_name),p("CHAD",sign_name)],
+        [p("Digitally signed by",sign_meta),p("MAVJI NARAN CHAD",ParagraphStyle("B167SignBold",parent=sign_meta,fontName="Helvetica-Bold")),p("Date: "+sign_date,sign_meta),p(sign_time+" +05'30'",sign_meta)]
+    ]],colWidths=[65*mm,55*mm],rowHeights=[35*mm])
+    sign_top.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),1.8,colors.black),("INNERGRID",(0,0),(-1,-1),1.2,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(0,0),(0,0),"CENTER"),
+        ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
+        ("TOPPADDING",(0,0),(-1,-1),2),("BOTTOMPADDING",(0,0),(-1,-1),2),
     ]))
-    footer=Table([[notices,signature]],colWidths=[115*mm,85*mm],rowHeights=[25*mm])
+    sign_bottom=Table([[p("FOR : MANSI COAL CAREER",sign_for)]],colWidths=[120*mm],rowHeights=[12*mm])
+    sign_bottom.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),1.8,colors.black),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ALIGN",(0,0),(-1,-1),"CENTER"),("LEFTPADDING",(0,0),(-1,-1),2),
+        ("RIGHTPADDING",(0,0),(-1,-1),2),("TOPPADDING",(0,0),(-1,-1),1),
+        ("BOTTOMPADDING",(0,0),(-1,-1),1),
+    ]))
+    right_panel=Table([[sign_top],[sign_bottom]],colWidths=[120*mm],rowHeights=[35*mm,12*mm])
+    right_panel.setStyle(TableStyle([
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),0),
+        ("RIGHTPADDING",(0,0),(-1,-1),0),("TOPPADDING",(0,0),(-1,-1),0),
+        ("BOTTOMPADDING",(0,0),(-1,-1),0),
+    ]))
+    footer=Table([[notices,right_panel]],colWidths=[122*mm,78*mm],rowHeights=[47*mm])
     footer.setStyle(TableStyle([
-        ("BOX",(0,0),(-1,-1),0.9,colors.black),("INNERGRID",(0,0),(-1,-1),0.65,colors.black),
+        ("BOX",(0,0),(-1,-1),1.8,colors.black),("INNERGRID",(0,0),(-1,-1),1.5,colors.black),
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
         ("LEFTPADDING",(0,0),(-1,-1),0),("RIGHTPADDING",(0,0),(-1,-1),0),
         ("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),0),
