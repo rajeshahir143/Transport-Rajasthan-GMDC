@@ -315,7 +315,13 @@ def generate_bill_pdf(out_path, firm, bill, builties):
         except (TypeError, ValueError): return 0.0
     def money(v): return f"{num(v):,.2f}"
     def wt(v): return f"{num(v):,.3f}"
-    firm_name = "MANSI COAL CARRIER"  # Rajasthan GMDC bill print company heading
+    # Show MANSI COAL CARRIER for the Rajasthan GMDC stationery;
+    # for every other selected company, retain its own Company Master name.
+    master_firm_name = str(firm.get("name") or "").strip()
+    normalized_firm_name = re.sub(r"[^A-Z0-9]+", " ", master_firm_name.upper()).strip()
+    firm_name = ("MANSI COAL CARRIER"
+                 if normalized_firm_name in {"RAJASTHAN GMDC", "RAJESHTHAN GMDC"}
+                 else (master_firm_name or "MANSI COAL CARRIER"))
     bill_type = str(bill.get("bill_type") or "MATERIAL").upper()
     invoice_label = "TAX INVOICE" if bill_type == "MATERIAL" else "DEBIT NOTE - FREIGHT"
     first = builties[0] if builties else {}
