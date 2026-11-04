@@ -467,11 +467,22 @@ class POBuiltyTab:
         if not po:
             messagebox.showwarning("Save Builty","Select the linked PO first.",parent=self.frame)
             return False
+        # PO consumption is the sum of the two actual weight entries.
+        # Keep legacy Builty Qty as a fallback for older forms/records.
         try:
-            qty=float((d.get("builty_qty") or "").replace(",",""))
+            weight_values=[]
+            for key in ("weight_1","weight_2"):
+                raw=(d.get(key) or "").replace(",","").strip()
+                weight_values.append(float(raw) if raw else 0.0)
+            weight_total=sum(weight_values)
+            if weight_total>0:
+                qty=weight_total
+                d["builty_qty"]=f"{qty:.3f}".rstrip("0").rstrip(".")
+            else:
+                qty=float((d.get("builty_qty") or "").replace(",",""))
             if qty<=0: raise ValueError
         except (TypeError,ValueError):
-            messagebox.showwarning("Save Builty","Enter a valid Builty Qty greater than zero.",parent=self.frame)
+            messagebox.showwarning("Save Builty","Enter valid Weight 1 / Weight 2 (or Builty Qty) greater than zero.",parent=self.frame)
             return False
 
         old_do_id=None
