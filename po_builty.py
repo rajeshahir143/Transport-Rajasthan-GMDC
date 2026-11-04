@@ -135,6 +135,9 @@ class POBuiltyTab:
             return
         for item in self.pending_tree.get_children():
             self.pending_tree.delete(item)
+        # A restored backup may contain stale remaining_qty values from an
+        # older version. Recalculate from original PO quantity and saved
+        # Builty transactions instead of trusting that cached column.
         with db() as con:
             rows=con.execute("""SELECT d.id,d.po_no,d.po_date,d.do_no,d.gmdc_do_no,d.do_date,
                                       d.customer_no,d.customer_name,d.customer_gstin,d.order_type,
@@ -142,18 +145,27 @@ class POBuiltyTab:
                                       d.qty,d.remaining_qty,d.uom,d.unit_price,d.extended_price,
                                       d.transporter_code,d.transporter_name,d.order_total,
                                       d.from_place,d.to_place
-                               FROM dos d WHERE COALESCE(d.remaining_qty,0)>0.000001
+                               FROM dos d WHERE COALESCE(d.qty,0)>0
                                ORDER BY d.id DESC""").fetchall()
         self.do_rows={}
         for row in rows:
+            pending=self._do_pending(int(row["id"]))
+            with db() as con:
+                con.execute("UPDATE dos SET remaining_qty=? WHERE id=?",(pending,int(row["id"])))
+            if pending<=0.000001:
+                continue
             po_no=row["po_no"] or row["do_no"] or row["gmdc_do_no"] or ""
-            po_date=row["po_date"] or row["do_date"] or ""
             label=f"#{row['id']} | PO {po_no} | {row['customer_name'] or ''}"
-            self.do_rows[label]=dict(row)
+            data=dict(row)
+            data["remaining_qty"]=pending
+            self.do_rows[label]=data
             self.pending_tree.insert("","end",values=(
                 row["id"],po_no,row["customer_name"] or "",
                 row["material"] or "",
-                f"{float(row['remaining_qty'] or 0):.3f} {row['uom'] or 'TON'}"))
+                f"{pending:.3f} {row['uom'] or 'TON'}"))
+        # Keep the full PO lookup separate from the pending-only list so a
+        # restored Builty can still resolve its original linked PO when edited.
+        self.refresh_do_options()
 
     def on_pending_po_select(self,_event=None):
         selection=self.pending_tree.selection()
