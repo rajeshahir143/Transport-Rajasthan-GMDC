@@ -472,14 +472,14 @@ def generate_bill_pdf(out_path, firm, bill, builties):
         ["", para("Round Off", bold), para(money(round_off), bold)],
         ["", para("NET AMOUNT", bold), para(money(total), bold)],
         [para("Rupees : " + _amount_in_words_indian(total), normal), "", ""],
-    ], colWidths=[96*mm, 42*mm, 44*mm], rowHeights=[43*mm,6*mm,6*mm,6*mm,6*mm,7*mm,6*mm])
+    ], colWidths=[96*mm, 42*mm, 44*mm], rowHeights=[50*mm,6*mm,6*mm,6*mm,6*mm,7*mm,6*mm])
     totals.setStyle(TableStyle([
         ("BOX",(0,0),(-1,-1),0.55,colors.black),("INNERGRID",(0,0),(-1,-1),0.3,colors.black),
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("LEFTPADDING",(0,0),(-1,-1),3),
         ("RIGHTPADDING",(0,0),(-1,-1),3),("TOPPADDING",(0,0),(-1,-1),1),
         ("BOTTOMPADDING",(0,0),(-1,-1),1),
     ]))
-    signature = Table([["", para("For " + firm_name, bold)]], colWidths=[122*mm, 60*mm], rowHeights=[10*mm])
+    signature = Table([["", para("For : MANSI COAL CARRIER", bold)]], colWidths=[122*mm, 60*mm], rowHeights=[10*mm])
     signature.setStyle(TableStyle([("ALIGN",(1,0),(1,0),"RIGHT"),("VALIGN",(0,0),(-1,-1),"BOTTOM"),("FONTNAME",(1,0),(1,0),"Helvetica-Bold")]))
     story.extend([totals, Spacer(1, 3), signature])
     doc.build(story)
