@@ -334,26 +334,39 @@ def generate_bill_pdf(out_path, firm, bill, builties):
             display_bill_date = display_bill_date[8:10] + "/" + display_bill_date[5:7] + "/" + display_bill_date[2:4]
     except (TypeError, ValueError):
         pass
-    invoice_title = ParagraphStyle("BillInvoiceTitle", parent=title, fontSize=13, leading=15, alignment=1)
+    # Match the B167 stationery header on Rajasthan material bills.
+    invoice_title = ParagraphStyle("BillInvoiceTitle", parent=title, fontSize=11, leading=13, alignment=1)
+    header_small = ParagraphStyle("BillHeaderSmall", parent=normal, fontName="Helvetica-Bold",
+                                  fontSize=7.2, leading=8.5, alignment=1)
     company_head = Table([
-        [para(firm_name, title), "", ""],
-        [para("GSTIN : " + str(firm.get("gstin") or ""), bold), "",
-         para("No. : " + str(bill_no), ParagraphStyle("BillNoRight", parent=bold, alignment=2))],
-        ["", para("TAX INVOICE", invoice_title),
-         para("Date : " + display_bill_date, ParagraphStyle("BillDateRight", parent=bold, alignment=2))],
-    ], colWidths=[61*mm, 60*mm, 61*mm], rowHeights=[10*mm, 7*mm, 7*mm])
+        [para("|| JAY MURLIDHAR ||", header_small)],
+        [para(firm_name, title)],
+        [para("TRANSPORT CONTRACTOR & COMMISSION AGENT",
+              ParagraphStyle("BillHeaderSubtitle", parent=header_small, fontSize=9, leading=11))],
+        [para(str(firm.get("address") or "At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway"),
+              header_small)],
+    ], colWidths=[182*mm], rowHeights=[5*mm, 10*mm, 7*mm, 6*mm])
     company_head.setStyle(TableStyle([
-        ("SPAN",(0,0),(-1,0)),
+        ("BOX",(0,0),(-1,-1),0.9,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ALIGN",(0,0),(-1,-1),"CENTER"),
+        ("LEFTPADDING",(0,0),(-1,-1),3), ("RIGHTPADDING",(0,0),(-1,-1),3),
+        ("TOPPADDING",(0,0),(-1,-1),0), ("BOTTOMPADDING",(0,0),(-1,-1),0),
     ]))
-    company_head.setStyle(TableStyle([
-        ("BOX",(0,0),(-1,-1),0.8,colors.black), ("LINEBELOW",(0,0),(-1,0),0.45,colors.black),
-        ("VALIGN",(0,0),(-1,-1),"MIDDLE"), ("ALIGN",(0,0),(0,0),"CENTER"),
-        ("ALIGN",(0,1),(0,1),"LEFT"), ("ALIGN",(2,1),(2,1),"RIGHT"),
-        ("ALIGN",(1,2),(1,2),"CENTER"), ("ALIGN",(2,2),(2,2),"RIGHT"),
-        ("FONTNAME",(0,1),(-1,1),"Helvetica-Bold"),
-        ("LEFTPADDING",(0,0),(-1,-1),4), ("RIGHTPADDING",(0,0),(-1,-1),5),
+    invoice_info = Table([[
+        para("GSTIN : " + str(firm.get("gstin") or ""), bold),
+        para(invoice_label, invoice_title),
+        para("No. : " + str(bill_no) + "    Date : " + display_bill_date,
+             ParagraphStyle("BillMetaRight", parent=bold, alignment=2)),
+    ]], colWidths=[61*mm, 60*mm, 61*mm], rowHeights=[8*mm])
+    invoice_info.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),0.8,colors.black),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("ALIGN",(0,0),(0,0),"LEFT"), ("ALIGN",(1,0),(1,0),"CENTER"),
+        ("ALIGN",(2,0),(2,0),"RIGHT"),
+        ("LEFTPADDING",(0,0),(-1,-1),4), ("RIGHTPADDING",(0,0),(-1,-1),4),
     ]))
-    story = [company_head, Spacer(1, 3)]
+    story = [company_head, invoice_info, Spacer(1, 3)]
     party_block = Table([
         [para("M/s. " + str(party), bold), para("Mines : " + str(mines), bold)],
         [para(str(address), normal), para("Description of Transport Service : LIGNITE", normal)],
