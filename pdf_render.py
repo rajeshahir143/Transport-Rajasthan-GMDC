@@ -458,7 +458,7 @@ def generate_bill_pdf(out_path, firm, bill, builties):
         ("LEFTPADDING",(0,0),(-1,-1),5), ("RIGHTPADDING",(0,0),(-1,-1),4),
         ("TOPPADDING",(0,0),(-1,-1),1), ("BOTTOMPADDING",(0,0),(-1,-1),1),
     ]))
-    left_boxes = Table([[terms_box], [bank_box]], colWidths=[96*mm], rowHeights=[21*mm, 22*mm])
+    left_boxes = Table([[terms_box], [bank_box]], colWidths=[96*mm], rowHeights=[24*mm, 26*mm])
     left_boxes.setStyle(TableStyle([
         ("VALIGN",(0,0),(-1,-1),"TOP"),
         ("LEFTPADDING",(0,0),(-1,-1),0), ("RIGHTPADDING",(0,0),(-1,-1),0),
