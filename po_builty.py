@@ -812,7 +812,7 @@ def generate_po_builty_pdf(out_path,firm,data):
     story.append(truck_and_tax)
 
     # Footer sized and divided like the user's two reference images.
-    notice_style=ParagraphStyle("B167Notice",parent=left,fontName="Helvetica-Bold",fontSize=11.5,leading=15)
+    notice_style=ParagraphStyle("B167Notice",parent=left,fontName="Helvetica-Bold",fontSize=9.5,leading=12)
     notices=Table([
         [p("* 1% SHORTAGE ALLOWED. WE ARE NOT RESPONSIBLE FOR\\nQUALITY MATERIAL DIRECT LOADING FROM COMPANY",notice_style)],
         [p("* GSTIN NO 24AHOPC9866DIZ5",notice_style)],
