@@ -737,10 +737,10 @@ def generate_po_builty_pdf(out_path,firm,data):
         total_weight_text=" / ".join(x for x in (weight1,weight2) if x) or val("builty_qty")
     bundle=val("total_bundle")
     goods=table([
-        [p("NO",centerbold),p("DESCRIPTION",centerbold),p("TOTAL<br/>BUNDLE",centerbold),p("TOTAL<br/>WEIGHT",centerbold)],
+        [p("NO",centerbold),p("DESCRIPTION",centerbold),p("TOTAL\\nBUNDLE",centerbold),p("TOTAL\\nWEIGHT",centerbold)],
         [p("1",centerbold),p(desc,centerbold),p(bundle,normal),p(total_weight_text,normal)],
         [p("SUB TOTAL",centerbold),"",p(bundle,bold),p(total_weight_text,bold)],
-    ],[15*mm,110*mm,25*mm,50*mm],[10*mm,32*mm,7*mm])
+    ],[15*mm,103*mm,32*mm,50*mm],[10*mm,32*mm,7*mm])
     story.append(goods)
 
     truck_text=Table([
