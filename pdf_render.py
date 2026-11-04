@@ -347,7 +347,7 @@ def generate_bill_pdf(out_path, firm, bill, builties):
                                   fontSize=7.2, leading=8.5, alignment=1)
     bill_header_address = str(firm.get("address") or "At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway")
     # Rajasthan bill stationery must not show the old Bhavnagar, Gujarat location.
-    bill_header_address = re.sub(r"\\bBhavnagar\\s*,?\\s*Gujarat\\b", "", bill_header_address, flags=re.IGNORECASE).strip(" ,-/")
+    bill_header_address = re.sub(r"\bBhavnagar\s*,?\s*Gujarat\b", "", bill_header_address, flags=re.IGNORECASE).strip(" ,-/")
     bill_header_address = (bill_header_address + "    GSTIN : " + str(firm.get("gstin") or "")).strip()
     company_head = Table([
         [para("|| JAY MURLIDHAR ||", header_small)],
