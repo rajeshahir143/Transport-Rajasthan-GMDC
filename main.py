@@ -66,9 +66,37 @@ class App(tk.Tk):
         self.minsize(1080, 660)
         init_db()
         self._style()
+        self._bind_enter_to_next_field()
         self._build()
         # init_db creates a startup backup; refresh latest copies hourly while app stays open.
         self.after(60 * 60 * 1000, self._automatic_backup_tick)
+
+    def _bind_enter_to_next_field(self):
+        """Move to the next data-entry control when Enter is pressed."""
+        self.bind_class("TEntry", "<Return>", self._focus_next_entry)
+        self.bind_class("TCombobox", "<Return>", self._focus_next_entry)
+        self.bind_class("TEntry", "<KP_Enter>", self._focus_next_entry)
+        self.bind_class("TCombobox", "<KP_Enter>", self._focus_next_entry)
+
+    def _focus_next_entry(self, event):
+        widget = event.widget
+        current_toplevel = widget.winfo_toplevel()
+        next_widget = widget.tk_focusNext()
+        # Skip labels, buttons, tables and other non-entry controls.
+        for _ in range(100):
+            if next_widget == widget or next_widget.winfo_toplevel() != current_toplevel:
+                break
+            if next_widget.winfo_class() in ("TEntry", "TCombobox"):
+                try:
+                    if str(next_widget.cget("state")) != "disabled":
+                        next_widget.focus_set()
+                        if next_widget.winfo_class() == "TEntry":
+                            next_widget.selection_range(0, "end")
+                        return "break"
+                except Exception:
+                    pass
+            next_widget = next_widget.tk_focusNext()
+        return "break"
 
     # ---------- styling ----------
     def _style(self):
