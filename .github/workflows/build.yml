@@ -28,7 +28,7 @@ jobs:
 
       - name: Check Python syntax
         run: |
-          python -m py_compile main.py db.py po_builty.py pdf_parser.py pdf_render.py swastik_import.py
+          python -m py_compile main.py db.py po_builty.py pdf_parser.py pdf_render.py swastik_import.py reports_exporter.py
 
       - name: Run unit tests when available
         shell: pwsh
@@ -41,7 +41,7 @@ jobs:
 
       - name: Build Windows EXE
         run: |
-          pyinstaller --noconfirm --clean --onefile --windowed --name Rajasthan_GMDC --collect-all reportlab --collect-all fitz --collect-all PIL --hidden-import=pypdf --hidden-import=uharfbuzz main.py
+          pyinstaller --noconfirm --clean --onefile --windowed --name Rajasthan_GMDC --collect-all reportlab --collect-all fitz --collect-all PIL --collect-all openpyxl --hidden-import=pypdf --hidden-import=uharfbuzz main.py
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
