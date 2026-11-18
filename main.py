@@ -1275,6 +1275,9 @@ class App(tk.Tk):
         # Load existing record for review/print. Saving an existing record is intentionally
         # not performed through Create, to avoid deducting the DO quantity twice.
         self.clear_builty_form()
+        self._editing_builty_id = int(b_id)
+        self._editing_builty_do_id = int(row["do_id"]) if row["do_id"] else None
+        self._selected_builty_do_id = self._editing_builty_do_id
         mapping = {
             "builty_no": "builty_no", "truck_no": "truck_no", "date": "date",
             "qty": "qty", "from_place": "from_place", "to_place": "to_place",
@@ -1311,6 +1314,9 @@ class App(tk.Tk):
         self.update_builty_preview()
 
     def clear_builty_form(self):
+        self._editing_builty_id = None
+        self._editing_builty_do_id = None
+        self._selected_builty_do_id = None
         for key, var in self.b_vars.items():
             var.set("")
         self.b_vars["date"].set(__import__("datetime").date.today().strftime("%d/%m/%Y"))
@@ -1573,7 +1579,58 @@ class App(tk.Tk):
                 self.bt.insert("", "end", values=values)
         finally:
             con.close()
+    def save_existing_builty(self):
+        b_id = self._editing_builty_id
+        con = db()
+        try:
+            old = con.execute('SELECT * FROM builtys WHERE id=?', (b_id,)).fetchone()
+            if not old:
+                messagebox.showerror('Edit Builty', 'Saved Builty no longer exists.')
+                return
+            if old['billed'] or old['freight_paid']:
+                messagebox.showwarning('Builty Locked', 'This Builty is linked with Bill/Freight Paid; edit the linked transaction first.')
+                return
+            do_id = int(old['do_id'])
+            do_row = con.execute('SELECT * FROM dos WHERE id=?', (do_id,)).fetchone()
+            qty = _f(self.b_vars['qty'].get())
+            available = _f(do_row['remaining_qty']) + _f(old['qty'])
+            if qty <= 0 or qty > available + 1e-9:
+                messagebox.showerror('Qty', f'Maximum available is {available:.3f} TON.')
+                return
+            no = '{} {}'.format(self.b_vars['builty_series'].get().strip(), self.b_vars['builty_no'].get().strip()).strip()
+            duplicate = con.execute('SELECT id FROM builtys WHERE builty_no=? AND id<>?', (no, b_id)).fetchone()
+            if duplicate:
+                messagebox.showerror('Duplicate Builty', 'આ Builty No. પહેલેથી વપરાયેલ છે.')
+                return
+            rate = _f(self.b_vars['freight_rate'].get())
+            freight = _f(self.b_vars['freight_amount'].get()) or qty * rate
+            con.execute('''UPDATE builtys SET builty_no=?,truck_no=?,date=?,qty=?,freight_rate=?,freight_amount=?,from_place=?,to_place=?,consignee=?,driver_name=?,ewaybill=?,remarks=? WHERE id=?''',
+                (no,self.b_vars['truck_no'].get().strip(),self.b_vars['date'].get().strip(),qty,rate,freight,self.b_vars['from_place'].get().strip(),self.b_vars['to_place'].get().strip(),self.b_vars['consignee'].get().strip(),self.b_vars['driver_name'].get().strip(),self.b_vars['ewaybill'].get().strip(),self.b_vars['remarks'].get().strip(),b_id))
+            extra=('mobile_no','owner_name','address','challan_no','quota_date','driver_payable','pay_status','cgst_rate','sgst_rate','sale_party','supply_party','center_name','quota_select','vehicle_no','sale_rate','sale_amount','despatch_weight','receipt_weight','freight_type','commission','receipt_date','driver_mobile','voucher_remarks','blt_print')
+            numeric={'cgst_rate','sgst_rate','sale_rate','sale_amount','despatch_weight','receipt_weight','commission','driver_payable'}
+            values=tuple(_f(self.b_vars[k].get()) if k in numeric else self.b_vars[k].get().strip() for k in extra)
+            con.execute('UPDATE builtys SET '+','.join(k+'=?' for k in extra)+' WHERE id=?', values+(b_id,))
+            con.execute('UPDATE dos SET remaining_qty=MAX(0,COALESCE(remaining_qty,0)+?-?) WHERE id=?', (_f(old['qty']),qty,do_id))
+            con.commit()
+            saved=con.execute('SELECT * FROM builtys WHERE id=?',(b_id,)).fetchone()
+            updated_do=con.execute('SELECT * FROM dos WHERE id=?',(do_id,)).fetchone()
+        except Exception as exc:
+            con.rollback()
+            messagebox.showerror('Edit Builty',str(exc))
+            return
+        finally:
+            con.close()
+        self._editing_builty_id=None
+        self._editing_builty_do_id=None
+        self._selected_builty_do_id=None
+        self._print_builty_pdf(dict(saved),dict(updated_do))
+        self.clear_builty_form()
+        self.refresh_builty()
+        self.refresh_do()
     def create_builty(self):
+        if getattr(self, '_editing_builty_id', None):
+            self.save_existing_builty()
+            return
         # Use the explicit ID selected in the pending-DO picker; the modal can
         # select a DO even when the main list is filtered or has not refreshed.
         do_id = getattr(self, "_selected_builty_do_id", None)
