@@ -2206,47 +2206,156 @@ class App(tk.Tk):
     # ===================== DATE-WISE EXPORT =====================
     def export_tab(self, nb):
         from reports_exporter import REPORTS
-        f = ttk.Frame(nb, padding=12)
-        nb.add(f, text="5 · Excel Reports")
-        ttk.Label(f, text="17 Separate Excel Reports", style="Title.TLabel").pack(anchor="w", pady=(0, 8))
-        dates = ttk.LabelFrame(f, text="Date Range", padding=8)
-        dates.pack(fill="x", pady=5)
-        self.export_from = tk.StringVar(value="01/01/2000")
-        self.export_to = tk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
-        ttk.Label(dates, text="From Date (DD/MM/YYYY)").grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        ttk.Entry(dates, textvariable=self.export_from, width=16).grid(row=0, column=1, padx=5, pady=5)
-        ttk.Label(dates, text="To Date (DD/MM/YYYY)").grid(row=0, column=2, padx=5, pady=5, sticky="w")
-        ttk.Entry(dates, textvariable=self.export_to, width=16).grid(row=0, column=3, padx=5, pady=5)
-        ttk.Label(f, text="દરેક Report અલગ .xlsx ફાઇલમાં Export થશે. Accounting Ledger data ઉપલબ્ધ ન હોય તેવા Reportsમાં સ્પષ્ટ નોંધ આવશે; ખોટા આંકડા નહીં બને.",
-                  wraplength=950).pack(anchor="w", pady=8)
-        grid = ttk.Frame(f)
-        grid.pack(fill="both", expand=True, anchor="nw")
-        for index, report in enumerate(REPORTS):
-            row, col = divmod(index, 3)
-            ttk.Button(grid, text=report, command=lambda name=report: self.export_excel_report(name)).grid(
-                row=row, column=col, sticky="ew", padx=5, pady=5, ipadx=8, ipady=5)
-        for col in range(3):
-            grid.columnconfigure(col, weight=1)
+        f = ttk.Frame(nb, padding=8)
+        nb.add(f, text="5 · Date-wise Export")
+        self.export_from = tk.StringVar(value="01/04/2026")
+        self.export_to = tk.StringVar(value=datetime.now().strftime("%d/%m/%y"))
+        self.export_report_var = tk.StringVar(value=REPORTS[0])
+        self.export_entry_var = tk.StringVar(value="1.Entry")
+        self.export_screen_preview = tk.BooleanVar(value=True)
+        self.export_commission_show = tk.BooleanVar(value=True)
+        self.export_agents = []
 
-    def export_excel_report(self, report_name):
+        top = ttk.Frame(f)
+        top.pack(fill="x")
+        ttk.Button(top, text="Z Close", command=lambda: nb.select(0)).pack(side="left", padx=3)
+        ttk.Label(top, text="Starting Date").pack(side="left", padx=(10,2))
+        ttk.Entry(top, textvariable=self.export_from, width=12).pack(side="left")
+        ttk.Label(top, text="Ending Date").pack(side="left", padx=(8,2))
+        ttk.Entry(top, textvariable=self.export_to, width=12).pack(side="left")
+        ttk.Button(top, text="1.Entry", command=lambda: self.export_entry_var.set("1.Entry")).pack(side="left", padx=8)
+        ttk.Button(top, text="Masters Selection", command=self.export_select_agents).pack(side="left", padx=3)
+        ttk.Button(top, text="2.Report", command=self.export_choose_report).pack(side="left", padx=3)
+        ttk.Checkbutton(top, text="Screen Preview", variable=self.export_screen_preview).pack(side="left", padx=5)
+        ttk.Checkbutton(top, text="Commi. Show", variable=self.export_commission_show).pack(side="left", padx=5)
+        ttk.Button(top, text="Go", command=self.run_export_preview).pack(side="left", padx=5)
+        ttk.Button(top, text="Excel", command=self.export_current_excel).pack(side="left", padx=3)
+
+        self.export_filter_label = ttk.Label(f, text="Report: " + self.export_report_var.get() + "   |   Agents: All")
+        self.export_filter_label.pack(anchor="w", pady=(6,3))
+        self.export_preview_frame = ttk.LabelFrame(f, text="Report Preview", padding=4)
+        self.export_preview_frame.pack(fill="both", expand=True)
+        self.export_preview_tree = None
+        self.export_preview_summary = ttk.Label(self.export_preview_frame, text="Report પસંદ કરીને Go દબાવો.")
+        self.export_preview_summary.pack(anchor="w")
+
+    def export_choose_report(self):
+        from reports_exporter import REPORTS
+        win = tk.Toplevel(self)
+        win.title("2. Report Selection")
+        win.geometry("380x500")
+        win.transient(self); win.grab_set()
+        ttk.Label(win, text="Select Report", font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=10, pady=8)
+        lb = tk.Listbox(win, height=20, exportselection=False)
+        lb.pack(fill="both", expand=True, padx=10, pady=5)
+        for name in REPORTS: lb.insert("end", name)
+        try: lb.selection_set(REPORTS.index(self.export_report_var.get()))
+        except ValueError: lb.selection_set(0)
+        def choose():
+            sel=lb.curselection()
+            if sel:
+                self.export_report_var.set(REPORTS[sel[0]])
+                self._update_export_filter_label()
+            win.destroy()
+        ttk.Button(win,text="Select",command=choose).pack(pady=8)
+        lb.bind("<Double-1>",lambda _e:choose())
+
+    def _update_export_filter_label(self):
+        agents = ", ".join(self.export_agents) if self.export_agents else "All"
+        self.export_filter_label.configure(text="Report: " + self.export_report_var.get() + "   |   Agents: " + agents)
+
+    def export_select_agents(self):
+        win=tk.Toplevel(self); win.title("Agents Selection"); win.geometry("560x480"); win.transient(self)
+        outer=ttk.Frame(win,padding=10); outer.pack(fill="both",expand=True)
+        buttons=ttk.Frame(outer); buttons.pack(fill="x",pady=(0,8))
+        lb=tk.Listbox(outer,selectmode="extended",font=("Consolas",10),exportselection=False)
+        lb.pack(fill="both",expand=True)
+        from db import db
+        with db() as con:
+            cols={r["name"] for r in con.execute("PRAGMA table_info(dos)")}
+            field="agent_name" if "agent_name" in cols else ("transporter_name" if "transporter_name" in cols else None)
+            names=[]
+            if field:
+                names=[r[0] for r in con.execute("SELECT DISTINCT " + field + " FROM dos WHERE COALESCE(" + field + ",'')<>'' ORDER BY " + field)]
+            bcols={r["name"] for r in con.execute("PRAGMA table_info(builtys)")}
+            if "agent_name" in bcols:
+                names += [r[0] for r in con.execute("SELECT DISTINCT agent_name FROM builtys WHERE COALESCE(agent_name,'')<>'' ORDER BY agent_name")]
+        names=sorted(set(str(x).strip() for x in names if str(x).strip()),key=str.casefold)
+        for name in names: lb.insert("end",name)
+        existing={x.casefold() for x in self.export_agents}
+        for i,name in enumerate(names):
+            if name.casefold() in existing: lb.selection_set(i)
+        def select_all(): lb.selection_set(0,"end")
+        def deselect(): lb.selection_clear(0,"end")
+        def invert():
+            chosen=set(lb.curselection())
+            for i in range(lb.size()):
+                if i in chosen: lb.selection_clear(i)
+                else: lb.selection_set(i)
+        ttk.Button(buttons,text="Z. Close",command=win.destroy).pack(side="left",padx=3)
+        ttk.Button(buttons,text="Select All",command=select_all).pack(side="left",padx=3)
+        ttk.Button(buttons,text="DeSelect All",command=deselect).pack(side="left",padx=3)
+        ttk.Button(buttons,text="Invert",command=invert).pack(side="left",padx=3)
+        def apply():
+            self.export_agents=[lb.get(i) for i in lb.curselection()]
+            self._update_export_filter_label(); win.destroy()
+        ttk.Button(buttons,text="Apply Selection",command=apply).pack(side="right",padx=3)
+
+    def _get_export_rows(self):
+        from reports_exporter import get_report_rows
+        from db import DB_PATH
+        return get_report_rows(DB_PATH,self.export_report_var.get(),self.export_from.get().strip(),
+                               self.export_to.get().strip(),self.export_agents,
+                               self.export_commission_show.get())
+
+    def run_export_preview(self):
+        try:
+            rows=self._get_export_rows()
+        except Exception as exc:
+            messagebox.showerror("Report",str(exc),parent=self); return
+        if self.export_preview_tree:
+            self.export_preview_tree.destroy()
+        self.export_preview_summary.pack_forget()
+        if not self.export_screen_preview.get():
+            self.export_preview_summary.configure(text="Screen Preview બંધ છે. Excel માટે Excel બટન દબાવો.")
+            self.export_preview_summary.pack(anchor="w"); return
+        if not rows:
+            self.export_preview_summary.configure(text="આ તારીખ અને Filterમાં કોઈ Record મળ્યો નથી.")
+            self.export_preview_summary.pack(anchor="w"); return
+        headers=[]
+        for row in rows:
+            for key in row:
+                if key!="data_json" and key not in headers: headers.append(key)
+        frame=ttk.Frame(self.export_preview_frame); frame.pack(fill="both",expand=True)
+        tree=ttk.Treeview(frame,columns=headers,show="headings")
+        vs=ttk.Scrollbar(frame,orient="vertical",command=tree.yview)
+        hs=ttk.Scrollbar(frame,orient="horizontal",command=tree.xview)
+        tree.configure(yscrollcommand=vs.set,xscrollcommand=hs.set)
+        tree.grid(row=0,column=0,sticky="nsew"); vs.grid(row=0,column=1,sticky="ns"); hs.grid(row=1,column=0,sticky="ew")
+        frame.rowconfigure(0,weight=1); frame.columnconfigure(0,weight=1)
+        for key in headers:
+            tree.heading(key,text=key.replace("_"," ").title())
+            tree.column(key,width=min(190,max(90,len(key)*9+20)),anchor="w")
+        for row in rows:
+            tree.insert("","end",values=[row.get(k,"") for k in headers])
+        self.export_preview_tree=frame
+        self.export_preview_summary.configure(text=f"{self.export_report_var.get()}  |  Records: {len(rows)}")
+        self.export_preview_summary.pack(anchor="w",before=frame)
+
+    def export_current_excel(self):
         from tkinter import filedialog
         from reports_exporter import export_report
         from db import DB_PATH
-        start = self.export_from.get().strip()
-        end = self.export_to.get().strip()
-        safe_name = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in report_name)
-        output = filedialog.asksaveasfilename(
-            title="Save " + report_name + " Excel Report",
-            defaultextension=".xlsx",
-            initialfile=safe_name + ".xlsx",
-            filetypes=[("Excel Workbook", "*.xlsx")])
-        if not output:
-            return
+        safe="".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in self.export_report_var.get())
+        output=filedialog.asksaveasfilename(title="Save Excel Report",defaultextension=".xlsx",
+            initialfile=safe+".xlsx",filetypes=[("Excel Workbook","*.xlsx")])
+        if not output:return
         try:
-            count = export_report(DB_PATH, report_name, start, end, output)
-            messagebox.showinfo("Excel Report", f"{report_name} Excel file saved successfully.\\nRecords: {count}\\n\\n{output}")
+            count=export_report(DB_PATH,self.export_report_var.get(),self.export_from.get().strip(),
+                self.export_to.get().strip(),output,self.export_agents,self.export_commission_show.get())
+            messagebox.showinfo("Excel Report",f"Excel file saved. Records: {count}\n{output}",parent=self)
         except Exception as exc:
-            messagebox.showerror("Excel Report", str(exc))
+            messagebox.showerror("Excel Report",str(exc),parent=self)
 
     def view_daily_report(self):
         """Show the daily Builty report on screen for the selected date range."""
