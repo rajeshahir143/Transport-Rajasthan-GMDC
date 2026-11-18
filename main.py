@@ -1298,6 +1298,16 @@ class App(tk.Tk):
         for target, source in mapping.items():
             if source in row.keys() and row[source] is not None:
                 self.b_vars[target].set(str(row[source]))
+        # Stored Builty No. is combined (for example "B 172").
+        # Split it back into the separate Series and Number fields for editing.
+        saved_no = str(row["builty_no"] or "").strip()
+        parts = saved_no.split(None, 1)
+        if len(parts) == 2:
+            self.b_vars["builty_series"].set(parts[0])
+            self.b_vars["builty_no"].set(parts[1])
+        else:
+            self.b_vars["builty_series"].set("")
+            self.b_vars["builty_no"].set(saved_no)
         if do_row:
             self._setting_do_from_pending_selection = True
             self.b_vars["do_no"].set(do_row["do_no"] or "")
