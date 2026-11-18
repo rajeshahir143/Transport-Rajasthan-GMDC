@@ -2283,8 +2283,17 @@ class App(tk.Tk):
         self.export_commission_show = tk.BooleanVar(value=True)
         self.export_agents = []
 
+        # First show the complete 17-report catalogue. The date/agent filters
+        # appear only after the user chooses a report.
+        report_picker = ttk.LabelFrame(f, text="Select Report", padding=8)
+        report_picker.pack(fill="both", expand=True)
+        report_list = tk.Listbox(report_picker, height=17, exportselection=False)
+        report_list.pack(fill="both", expand=True, pady=(0,6))
+        for report_name in REPORTS:
+            report_list.insert("end", report_name)
+        report_list.selection_set(0)
+
         top = ttk.Frame(f)
-        top.pack(fill="x")
         ttk.Button(top, text="Z Close", command=lambda: nb.select(0)).pack(side="left", padx=3)
         ttk.Label(top, text="Starting Date").pack(side="left", padx=(10,2))
         ttk.Entry(top, textvariable=self.export_from, width=12).pack(side="left")
@@ -2299,9 +2308,21 @@ class App(tk.Tk):
         ttk.Button(top, text="Excel", command=self.export_current_excel).pack(side="left", padx=3)
 
         self.export_filter_label = ttk.Label(f, text="Report: " + self.export_report_var.get() + "   |   Agents: All")
-        self.export_filter_label.pack(anchor="w", pady=(6,3))
         self.export_preview_frame = ttk.LabelFrame(f, text="Report Preview", padding=4)
-        self.export_preview_frame.pack(fill="both", expand=True)
+        def open_selected_report(_event=None):
+            selected = report_list.curselection()
+            if not selected:
+                messagebox.showwarning("Report", "પહેલા 17 Reportsમાંથી એક પસંદ કરો.", parent=self)
+                return
+            self.export_report_var.set(REPORTS[selected[0]])
+            report_picker.pack_forget()
+            top.pack(fill="x")
+            self.export_filter_label.pack(anchor="w", pady=(6,3))
+            self.export_preview_frame.pack(fill="both", expand=True)
+            self._update_export_filter_label()
+            self.export_preview_summary.configure(text="Filter પસંદ કરીને Go દબાવો.")
+        ttk.Button(report_picker, text="Open Selected Report", command=open_selected_report).pack(side="left")
+        report_list.bind("<Double-1>", open_selected_report)
         self.export_preview_tree = None
         self.export_preview_summary = ttk.Label(self.export_preview_frame, text="Report પસંદ કરીને Go દબાવો.")
         self.export_preview_summary.pack(anchor="w")
