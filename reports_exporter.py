@@ -84,7 +84,24 @@ def _records(con, report, start, end):
                 rows.append(d)
     return rows
 
-def export_report(database_path, report, start_text, end_text, output_path):
+def get_report_rows(database_path, report, start_text, end_text, agents=None, show_commission=True):
+    start,end=_date(start_text),_date(end_text)
+    if not start or not end: raise ValueError("Date DD/MM/YY અથવા DD/MM/YYYY formatમાં આપો.")
+    if start>end: raise ValueError("From Date, To Date કરતાં આગળ ન હોવી જોઈએ.")
+    con=sqlite3.connect(str(database_path)); con.row_factory=sqlite3.Row
+    try:
+        rows=_records(con,report,start,end)
+        if agents:
+            wanted={str(x).strip().casefold() for x in agents}
+            rows=[r for r in rows if str(r.get("report_agent") or r.get("agent_name") or r.get("do_agent") or r.get("transporter_name") or "").strip().casefold() in wanted]
+        if not show_commission:
+            for row in rows:
+                row.pop("commission",None); row.pop("commission_amount",None)
+        return rows
+    finally:
+        con.close()
+
+def export_report(database_path, report, start_text, end_text, output_path, agents=None, show_commission=True):
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment
@@ -97,6 +114,12 @@ def export_report(database_path, report, start_text, end_text, output_path):
     con=sqlite3.connect(str(database_path)); con.row_factory=sqlite3.Row
     try:
         rows=_records(con,report,start,end)
+        if agents:
+            wanted={str(x).strip().casefold() for x in agents}
+            rows=[r for r in rows if str(r.get("report_agent") or r.get("agent_name") or r.get("do_agent") or r.get("transporter_name") or "").strip().casefold() in wanted]
+        if not show_commission:
+            for row in rows:
+                row.pop("commission",None); row.pop("commission_amount",None)
         wb=Workbook(); ws=wb.active; ws.title=report[:31]
         ws.append([report]); ws.append(["From",start.strftime("%d/%m/%Y"),"To",end.strftime("%d/%m/%Y")])
         if report in ACCOUNTING_ONLY:
