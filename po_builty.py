@@ -90,6 +90,7 @@ class POBuiltyTab:
         self.pending_label=ttk.Label(f,text="Pending: — TON")
         self.vars={k:tk.StringVar() for k,_ in FIELDS}; self.vars["lr_date"].set(datetime.now().strftime("%d/%m/%Y")); self.vars["builty_company"].set("MANSI COAL CARRIER"); self.vars["builty_address"].set("At Post Kunriya, Tal. Bhuj-Kutch. Corr Add Office No b/h sadguru complex madhapar highway"); self.set_fixed_parties()
         self.selected_id=None
+        self.legacy_standard_id=None
         # Scrollable form: keep every B167 field reachable even on shorter screens.
         form_host=ttk.Frame(left); form_host.pack(fill="both",expand=True)
         form_canvas=tk.Canvas(form_host,highlightthickness=0,borderwidth=0)
@@ -311,6 +312,8 @@ class POBuiltyTab:
                         current_standard_id=int(json.loads(current["data_json"] or "{}").get("standard_builty_id") or 0) or None
                     except (TypeError,ValueError):
                         pass
+            if current_standard_id is None:
+                current_standard_id=getattr(self,"legacy_standard_id",None)
             standard=con.execute(
                 "SELECT COALESCE(SUM(qty),0) FROM builtys WHERE do_id=? AND (? IS NULL OR id<>?)",
                 (do_id,current_standard_id,current_standard_id)
@@ -340,6 +343,7 @@ class POBuiltyTab:
 
     def clear(self):
         self.selected_id=None
+        self.legacy_standard_id=None
         for v in self.vars.values(): v.set("")
         self.vars["lr_date"].set(datetime.now().strftime("%d/%m/%Y"))
         self.vars["builty_qty"].set("")
@@ -488,6 +492,17 @@ class POBuiltyTab:
         old_do_id=None
         standard_id=None
         old_billed=False
+        if self.legacy_standard_id:
+            standard_id=int(self.legacy_standard_id)
+            with db() as con:
+                old=con.execute("SELECT do_id,billed,freight_paid FROM builtys WHERE id=?",(standard_id,)).fetchone()
+                if not old:
+                    messagebox.showerror("Edit Builty","Imported Builty record no longer exists.",parent=self.frame)
+                    return False
+                old_do_id=int(old["do_id"]) if old["do_id"] else None
+                if old["billed"] or old["freight_paid"]:
+                    messagebox.showwarning("Builty Locked","This Builty is already billed or freight-paid; its linked transaction must be edited from the original screen.",parent=self.frame)
+                    return False
         if self.selected_id:
             with db() as con:
                 old=con.execute("SELECT data_json FROM po_builtys WHERE id=?",(self.selected_id,)).fetchone()
@@ -544,6 +559,7 @@ class POBuiltyTab:
                     cur=con.execute("INSERT INTO po_builtys(lr_no,lr_date,data_json) VALUES(?,?,?)",
                                     (d["lr_no"],d["lr_date"],json.dumps(d,ensure_ascii=False)))
                     self.selected_id=cur.lastrowid
+            self.legacy_standard_id=None
             self._sync_do_balance(int(po["id"]))
             if old_do_id and old_do_id!=int(po["id"]): self._sync_do_balance(old_do_id)
             self.refresh(); self.refresh_do_options()
@@ -558,17 +574,33 @@ class POBuiltyTab:
         for x in self.tree.get_children(): self.tree.delete(x)
         with db() as con:
             rows=con.execute("SELECT id,lr_no,lr_date,data_json FROM po_builtys ORDER BY id DESC").fetchall()
+            legacy=con.execute("""SELECT b.*,d.po_no,d.do_no,d.gmdc_do_no,d.customer_name,d.customer_gstin,d.material,
+                d.qty AS po_qty,d.uom,d.schedule_date FROM builtys b LEFT JOIN dos d ON d.id=b.do_id
+                ORDER BY b.id DESC""").fetchall()
         selected_po=self._selected_do()
         query=self.search_var.get().strip().casefold() if hasattr(self,"search_var") else ""
+        linked_standard=set()
         for r in rows:
             d=json.loads(r["data_json"] or "{}")
+            if d.get("standard_builty_id"):
+                linked_standard.add(int(d["standard_builty_id"]))
             linked=str(d.get("linked_do_id",""))
             if getattr(self,"builty_filter","all")=="selected" and (not selected_po or linked!=str(selected_po["id"])):
                 continue
             searchable=" ".join(str(v or "") for v in (r["id"],r["lr_no"],r["lr_date"],d.get("consignee_name",""),d.get("truck_no",""),d.get("linked_do_id",""))).casefold()
-            if query and query not in searchable:
-                continue
-            self.tree.insert("","end",values=(r["id"],r["lr_no"],r["lr_date"],d.get("consignee_name",""),d.get("truck_no",""),d.get("builty_qty",""),d.get("total","")))
+            if query and query not in searchable: continue
+            self.tree.insert("","end",iid=f"po:{r['id']}",values=(r["id"],r["lr_no"],r["lr_date"],d.get("consignee_name",""),d.get("truck_no",""),d.get("builty_qty",""),d.get("total","")))
+        for r in legacy:
+            if int(r["id"]) in linked_standard: continue
+            linked=str(r["do_id"] or "")
+            if getattr(self,"builty_filter","all")=="selected" and (not selected_po or linked!=str(selected_po["id"])): continue
+            lr=str(r["builty_no"] or "")
+            party=str(r["consignee"] or r["customer_name"] or "")
+            truck=str(r["vehicle_no"] or r["truck_no"] or "")
+            weight=r["qty"] or 0
+            searchable=" ".join(str(v or "") for v in (r["id"],lr,r["date"],party,truck,linked)).casefold()
+            if query and query not in searchable: continue
+            self.tree.insert("","end",iid=f"legacy:{r['id']}",values=(r["id"],lr,r["date"],party,truck,weight,r["freight_amount"] or ""))
         self.refresh_pending_po_list()
 
     def show_selected_po_builtys(self):
@@ -585,17 +617,49 @@ class POBuiltyTab:
     def load(self,_event=None):
         s=self.tree.selection()
         if not s:return
-        self.selected_id=int(self.tree.item(s[0])["values"][0])
-        with db() as con:r=con.execute("SELECT data_json FROM po_builtys WHERE id=?",(self.selected_id,)).fetchone()
-        if r:
+        item=s[0]
+        iid=str(self.tree.item(item,"iid") or "")
+        ident=int(self.tree.item(item)["values"][0])
+        if iid.startswith("legacy:"):
+            self.selected_id=None
+            self.legacy_standard_id=ident
+            with db() as con:
+                row=con.execute("""SELECT b.*,d.po_no,d.po_date,d.do_no,d.gmdc_do_no,d.do_date,
+                    d.customer_name,d.customer_gstin,d.material,d.qty AS po_qty,d.uom,d.unit_price,
+                    d.schedule_date,d.transporter_name,d.bill_to,d.ship_to
+                    FROM builtys b LEFT JOIN dos d ON d.id=b.do_id WHERE b.id=?""",(ident,)).fetchone()
+            if not row:return
+            x=dict(row)
+            d={"lr_no":x.get("builty_no") or "","lr_date":x.get("date") or "",
+               "truck_no":x.get("vehicle_no") or x.get("truck_no") or "",
+               "builty_qty":str(x.get("qty") or ""),"weight_1":str(x.get("despatch_weight") or ""),
+               "weight_2":str(x.get("receipt_weight") or ""),"driver_name":x.get("driver_name") or "",
+               "driver_address":x.get("address") or "","truck_owner":x.get("owner_name") or "",
+               "mobile_no":x.get("mobile_no") or "","challan_no":x.get("challan_no") or "",
+               "eway_bill_no":x.get("ewaybill") or "","consignor_name":x.get("consignor") or "",
+               "consignor_address":x.get("from_place") or "","consignee_name":x.get("consignee") or "",
+               "consignee_address":x.get("to_place") or "","po_no":x.get("po_no") or x.get("do_no") or x.get("gmdc_do_no") or "",
+               "po_date":x.get("po_date") or x.get("do_date") or "","po_buyer":x.get("customer_name") or "",
+               "po_vendor":x.get("transporter_name") or "","po_material":x.get("material") or "",
+               "po_qty":str(x.get("po_qty") or ""),"po_uom":x.get("uom") or "TON",
+               "po_rate":str(x.get("unit_price") or ""),"po_delivery_date":x.get("schedule_date") or "",
+               "consignee_gstin":x.get("customer_gstin") or ""}
+            for k,v in self.vars.items():v.set(str(d.get(k,"")))
+            linked_id=str(x.get("do_id") or "")
+        else:
+            self.selected_id=ident
+            self.legacy_standard_id=None
+            with db() as con:r=con.execute("SELECT data_json FROM po_builtys WHERE id=?",(self.selected_id,)).fetchone()
+            if not r:return
             d=json.loads(r["data_json"] or "{}")
             for k,v in self.vars.items():v.set(str(d.get(k,"")))
             linked_id=str(d.get("linked_do_id",""))
-            for label,row in getattr(self,"do_rows",{}).items():
-                if str(row["id"])==linked_id:
-                    self.do_var.set(label)
-                    break
-            self.update_pending_label()
+        for label,row in getattr(self,"do_rows",{}).items():
+            if str(row["id"])==linked_id:
+                self.do_var.set(label)
+                break
+        self.update_pending_label()
+        self.update_po_details()
 
     def delete(self):
         s=self.tree.selection()
@@ -628,13 +692,18 @@ class POBuiltyTab:
 
     def print_pdf(self):
         d={k:v.get().strip() for k,v in self.vars.items()}
-        if not d["lr_no"]:messagebox.showwarning("Print PDF","Enter/import LR No. first.");return
-        if not self.save():return
-        from po_builty import generate_po_builty_pdf
-        # Keep the original saved timestamp; previewing/printing later must not change it.
-        with db() as con:
-            saved=con.execute("SELECT created_at FROM po_builtys WHERE id=?",(self.selected_id,)).fetchone()
-        d["created_at"] = saved["created_at"] if saved else ""
+        if not d["lr_no"]:messagebox.showwarning("Print PDF","Select or enter a Builty No. first.");return
+        if self.legacy_standard_id:
+            # Printing a historical imported Builty is read-only: do not create a
+            # new PO Builty row or alter the original Bill/Freight relationships.
+            with db() as con:
+                saved=con.execute("SELECT created_at FROM builtys WHERE id=?",(self.legacy_standard_id,)).fetchone()
+            d["created_at"]=saved["created_at"] if saved else ""
+        else:
+            if not self.save():return
+            with db() as con:
+                saved=con.execute("SELECT created_at FROM po_builtys WHERE id=?",(self.selected_id,)).fetchone()
+            d["created_at"] = saved["created_at"] if saved else ""
         out=self.export_dir/("PO_Builty_"+re.sub(r"[^A-Za-z0-9_-]","_",d["lr_no"])+".pdf")
         try:generate_po_builty_pdf(out,self.firm_getter(),d)
         except Exception as e:messagebox.showerror("PO Builty PDF",str(e));return
