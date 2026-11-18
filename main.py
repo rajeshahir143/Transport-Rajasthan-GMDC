@@ -2205,31 +2205,48 @@ class App(tk.Tk):
 
     # ===================== DATE-WISE EXPORT =====================
     def export_tab(self, nb):
+        from reports_exporter import REPORTS
         f = ttk.Frame(nb, padding=12)
-        nb.add(f, text="5 · Date-wise Export")
-        is_rajasthan = get_active_company().casefold() == "rajasthan gmdc"
-        ttk.Label(f, text=("Export PO, Builty and Bill records by date range" if is_rajasthan else "Export DO, Builty and Bill records by date range"),
-                  style="Title.TLabel").pack(anchor="w", pady=(0, 8))
+        nb.add(f, text="5 · Excel Reports")
+        ttk.Label(f, text="17 Separate Excel Reports", style="Title.TLabel").pack(anchor="w", pady=(0, 8))
         dates = ttk.LabelFrame(f, text="Date Range", padding=8)
         dates.pack(fill="x", pady=5)
         self.export_from = tk.StringVar(value="01/01/2000")
-        self.export_to = tk.StringVar(value=datetime.now().strftime("%d/%m/%y"))
-        ttk.Label(dates, text="From Date (DD/MM/YY)").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.export_to = tk.StringVar(value=datetime.now().strftime("%d/%m/%Y"))
+        ttk.Label(dates, text="From Date (DD/MM/YYYY)").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         ttk.Entry(dates, textvariable=self.export_from, width=16).grid(row=0, column=1, padx=5, pady=5)
-        ttk.Label(dates, text="To Date (DD/MM/YY)").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        ttk.Label(dates, text="To Date (DD/MM/YYYY)").grid(row=0, column=2, padx=5, pady=5, sticky="w")
         ttk.Entry(dates, textvariable=self.export_to, width=16).grid(row=0, column=3, padx=5, pady=5)
-        ttk.Label(f, text="Select an export below. Each export includes all matching records in the selected date range.",
-                  wraplength=900).pack(anchor="w", pady=8)
-        buttons = ttk.Frame(f)
-        buttons.pack(anchor="w", pady=5)
-        ttk.Button(buttons, text=("Export POs to CSV" if is_rajasthan else "Export DOs to CSV"), command=lambda: self.export_datewise("do")).grid(row=0, column=0, padx=5, pady=5)
-        ttk.Button(buttons, text="Export Builties to CSV", command=lambda: self.export_datewise("builty")).grid(row=0, column=1, padx=5, pady=5)
-        ttk.Button(buttons, text="Export Bills to CSV", command=lambda: self.export_datewise("bill")).grid(row=0, column=2, padx=5, pady=5)
-        ttk.Button(buttons, text="Daily Builty Report (CSV)", command=self.export_daily_builty_report).grid(row=2, column=0, columnspan=3, padx=5, pady=8, sticky="ew")
-        ttk.Button(buttons, text="View Daily Report", command=self.view_daily_report).grid(row=3, column=0, columnspan=3, padx=5, pady=5, sticky="ew")
-        ttk.Button(buttons, text="Export ALL (DO + Builty + Bills)", command=lambda: self.export_datewise("all")).grid(row=1, column=0, columnspan=3, padx=5, pady=8, sticky="ew")
+        ttk.Label(f, text="દરેક Report અલગ .xlsx ફાઇલમાં Export થશે. Accounting Ledger data ઉપલબ્ધ ન હોય તેવા Reportsમાં સ્પષ્ટ નોંધ આવશે; ખોટા આંકડા નહીં બને.",
+                  wraplength=950).pack(anchor="w", pady=8)
+        grid = ttk.Frame(f)
+        grid.pack(fill="both", expand=True, anchor="nw")
+        for index, report in enumerate(REPORTS):
+            row, col = divmod(index, 3)
+            ttk.Button(grid, text=report, command=lambda name=report: self.export_excel_report(name)).grid(
+                row=row, column=col, sticky="ew", padx=5, pady=5, ipadx=8, ipady=5)
+        for col in range(3):
+            grid.columnconfigure(col, weight=1)
 
-
+    def export_excel_report(self, report_name):
+        from tkinter import filedialog
+        from reports_exporter import export_report
+        from db import DB_PATH
+        start = self.export_from.get().strip()
+        end = self.export_to.get().strip()
+        safe_name = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in report_name)
+        output = filedialog.asksaveasfilename(
+            title="Save " + report_name + " Excel Report",
+            defaultextension=".xlsx",
+            initialfile=safe_name + ".xlsx",
+            filetypes=[("Excel Workbook", "*.xlsx")])
+        if not output:
+            return
+        try:
+            count = export_report(DB_PATH, report_name, start, end, output)
+            messagebox.showinfo("Excel Report", f"{report_name} Excel file saved successfully.\\nRecords: {count}\\n\\n{output}")
+        except Exception as exc:
+            messagebox.showerror("Excel Report", str(exc))
 
     def view_daily_report(self):
         """Show the daily Builty report on screen for the selected date range."""
