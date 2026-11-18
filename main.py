@@ -2323,6 +2323,7 @@ class App(tk.Tk):
             self.export_preview_summary.configure(text="Filter પસંદ કરીને Go દબાવો.")
         ttk.Button(report_picker, text="Open Selected Report", command=open_selected_report).pack(side="left")
         report_list.bind("<Double-1>", open_selected_report)
+        report_list.bind("<<ListboxSelect>>", open_selected_report)
         self.export_preview_tree = None
         self.export_preview_summary = ttk.Label(self.export_preview_frame, text="Report પસંદ કરીને Go દબાવો.")
         self.export_preview_summary.pack(anchor="w")
