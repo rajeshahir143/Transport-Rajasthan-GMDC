@@ -550,8 +550,11 @@ def generate_chit_pdf(out_path, firm, builty, do_row):
     do_number = first(do_row.get("do_no"), do_row.get("gmdc_do_no"))
     reg_no = first(do_row.get("registration_no"), do_row.get("regi_no"), do_row.get("reg_no"))
     do_date = first(do_row.get("date"), do_row.get("do_date"))
-    truck_no = first(builty.get("truck_no"), builty.get("vehicle_no"))
+    # Chit keeps the Truck No. label blank; vehicle registration is not printed here.
+    # The Builty number is printed only in the dedicated No. box above.
+    truck_no = ""
     chit_no = first(builty.get("builty_no"), builty.get("lr_no"), builty.get("id"))
+    code_no = first(firm.get("code_no"), firm.get("code"), "")
     # Print the date the Builty was created, not the DO date.
     chit_date = first(builty.get("date"), builty.get("builty_date"), builty.get("created_at"))
 
@@ -596,7 +599,7 @@ def generate_chit_pdf(out_path, firm, builty, do_row):
     quantity = _CircleTons("24 Tons", bold)
     grade_code = Table([
         [para("Grade 'A'", bold)],
-        [para("CODE NO: M595", bold)],
+        [para("CODE NO: " + code_no, bold)],
     ], colWidths=[37*mm], rowHeights=[11*mm, 11*mm])
     grade_code.setStyle(TableStyle([
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(0,0),(-1,-1),"CENTER"),
