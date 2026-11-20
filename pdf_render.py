@@ -553,7 +553,6 @@ def generate_chit_pdf(out_path, firm, builty, do_row):
     # Chit keeps the Truck No. label blank; vehicle registration is not printed here.
     # The Builty number is printed only in the dedicated No. box above.
     truck_no = ""
-    chit_no = first(builty.get("builty_no"), builty.get("lr_no"), builty.get("id"))
     code_no = first(firm.get("code_no"), firm.get("code"), "")
     # Print the date the Builty was created, not the DO date.
     chit_date = first(builty.get("date"), builty.get("builty_date"), builty.get("created_at"))
@@ -605,12 +604,11 @@ def generate_chit_pdf(out_path, firm, builty, do_row):
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),("ALIGN",(0,0),(-1,-1),"CENTER"),
         ("LEFTPADDING",(0,0),(-1,-1),3),("RIGHTPADDING",(0,0),(-1,-1),3),
     ]))
-    number_date = Table([[
-        para("No. " + (chit_no or "........................"), bold),
-        para("Date: " + (chit_date or "................................"), bold)
-    ]], colWidths=[92.5*mm, 92.5*mm], rowHeights=[9*mm])
-    number_date.setStyle(TableStyle([
-        ("BOX",(0,0),(-1,-1),0.8,colors.black),("INNERGRID",(0,0),(-1,-1),0.5,colors.black),
+    # Do not print the Builty/LR number anywhere on the mine-loading chit.
+    date_row = Table([[para("Date: " + (chit_date or "................................"), bold)]],
+                     colWidths=[185*mm], rowHeights=[9*mm])
+    date_row.setStyle(TableStyle([
+        ("BOX",(0,0),(-1,-1),0.8,colors.black),
         ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
         ("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),5),
     ]))
@@ -673,7 +671,7 @@ def generate_chit_pdf(out_path, firm, builty, do_row):
     footer = Table([[para("For MANSI COAL CARRIERS", bold)]], colWidths=[185*mm], rowHeights=[16*mm])
     footer.setStyle(TableStyle([("ALIGN",(0,0),(-1,-1),"RIGHT"),("VALIGN",(0,0),(-1,-1),"BOTTOM"),
         ("LEFTPADDING",(0,0),(-1,-1),5),("RIGHTPADDING",(0,0),(-1,-1),8)]))
-    story = [header, Spacer(1, 3*mm), number_date, Spacer(1, 1*mm), recipient_block, Spacer(1, 2*mm),
+    story = [header, Spacer(1, 3*mm), date_row, Spacer(1, 1*mm), recipient_block, Spacer(1, 2*mm),
              details, Spacer(1, 2*mm), instructions, footer]
     doc.build(story)
     return str(out_path)
