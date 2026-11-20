@@ -1806,7 +1806,7 @@ class App(tk.Tk):
         ttk.Label(frame, text="Company Name (fixed):", font=("Segoe UI", 9, "bold")).grid(row=0, column=0, sticky="w", pady=5)
         ttk.Label(frame, text=selected, font=("Segoe UI", 10, "bold")).grid(row=0, column=1, sticky="w", pady=5)
         fields = [
-            ("GSTIN", "gstin"), ("Address", "address"), ("Phone", "phone"),
+            ("GSTIN", "gstin"), ("Code No.", "code_no"), ("Address", "address"), ("Phone", "phone"),
             ("Email", "email"), ("Bank Name", "bank_name"), ("Account Number", "account_no"),
             ("IFSC", "ifsc_code"), ("Branch Name", "branch_name"),
         ]
